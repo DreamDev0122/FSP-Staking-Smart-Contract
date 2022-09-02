@@ -741,7 +741,6 @@ contract SmartChefInitializable is Ownable, ReentrancyGuard {
 
     struct UserInfo {
         uint256 amount; // How many staked tokens the user has provided
-        uint256 rewardDebt; // Reward debt
     }
 
     event Deposit(address indexed user, uint256 amount);
@@ -817,8 +816,6 @@ contract SmartChefInitializable is Ownable, ReentrancyGuard {
      */
     function deposit(uint256 _amount) external nonReentrant {
         UserInfo storage user = userInfo[msg.sender];
-
-        uint256 numberUserPoints = 0;
 
         require(
             !userLimit || ((_amount + user.amount) <= limitAmountPerUser),
@@ -951,6 +948,7 @@ contract SmartChefInitializable is Ownable, ReentrancyGuard {
      */
     function pendingReward(address _user) external view returns (uint256) {
         UserInfo storage user = userInfo[_user];
+        
         return 0;
     }
 
@@ -977,6 +975,7 @@ contract SmartChefInitializable is Ownable, ReentrancyGuard {
      * @param _user: user address to calculate reward amount
      */
     function _getRewardAmount(address _user) internal view returns (uint256) {
+        UserInfo memory user = userInfo[_user];
         return 0;
     }
 
@@ -997,6 +996,10 @@ contract SmartChefInitializable is Ownable, ReentrancyGuard {
 contract SmartChefFactory is Ownable {
     mapping(address => address[]) public pools;
     uint256 public poolPrice = 2 ether;
+    uint256 public rewardPercent1 = 1000000;
+    uint256 public rewardPercent2 = 49310;
+    uint256 public rewardPercent3 = 24650;
+    uint256 public rewardPercent4 = 8291;
 
     event NewSmartChefContract(address indexed smartChef);
 
@@ -1024,20 +1027,18 @@ contract SmartChefFactory is Ownable {
         IERC20Metadata _reflectionToken,
         uint256 _rewardSupply,
         uint256 _APYPercent,
-        uint256 _lockTime,
+        uint256 _lockTimeType,
         uint256 _limitAmountPerUser,
         string memory _stakedTokenSymbol,
-        string memory _reflectionTokenSymbol,
-        address _admin
+        string memory _reflectionTokenSymbol
     ) external payable {
+        require(poolPrice <= msg.value, "Pool Price is not correct.");
         // require(_stakedToken.totalSupply() >= 0);
         // require(_reflectionToken.totalSupply() >= 0);
-        // require(
-        //     _stakedToken != _reflectionToken,
-        //     "Tokens must be be different"
-        // );
-
-        require(poolPrice <= msg.value, "Pool Price is not correct.");
+        require(
+            _stakedToken != _reflectionToken,
+            "Tokens must be be different"
+        );
 
         bytes memory bytecode = type(SmartChefInitializable).creationCode;
         // pass constructor argument
@@ -1056,25 +1057,79 @@ contract SmartChefFactory is Ownable {
             )
         }
 
-        uint256 _maxTokenSupply = (_rewardSupply / _APYPercent) * 100;
+        uint256 _maxTokenSupply = (
+            ((_rewardSupply / _APYPercent) * 100) / _lockTimeType == 0
+                ? rewardPercent1
+                : _lockTimeType == 1
+                ? rewardPercent2
+                : _lockTimeType == 2
+                ? rewardPercent3
+                : rewardPercent4
+        ) * 10**6;
+
+        IERC20(_stakedToken).transferFrom(
+            msg.sender,
+            address(this),
+            _rewardSupply
+        );
 
         SmartChefInitializable(smartChefAddress).initialize(
             _stakedToken,
             _reflectionToken,
             _rewardSupply,
             _APYPercent,
-            _lockTime,
+            365 days,
             _maxTokenSupply,
             _limitAmountPerUser,
             _stakedTokenSymbol,
             _reflectionTokenSymbol,
-            _admin
+            msg.sender
         );
 
+        IERC20(_stakedToken).transfer(smartChefAddress, _rewardSupply);
         emit NewSmartChefContract(smartChefAddress);
     }
 
     function updatePoolPrice(uint256 _poolPrice) external onlyOwner {
         poolPrice = _poolPrice;
+    }
+
+    /**
+     * @notice Transfer ETH and return the success status.
+     * @dev This function only forwards 30,000 gas to the callee.
+     * @param to Address for ETH to be send to
+     * @param value Amount of ETH to send
+     */
+    function _safeTransferETH(address to, uint256 value)
+        internal
+        returns (bool)
+    {
+        (bool success, ) = to.call{value: value, gas: 30_000}(new bytes(0));
+        return success;
+    }
+
+    /**
+     * @notice Allows owner to withdraw ETH funds to an address
+     * @dev wraps _user in payable to fix address -> address payable
+     * @param to Address for ETH to be send to
+     * @param amount Amount of ETH to send
+     */
+    function withdraw(address payable to, uint256 amount) public onlyOwner {
+        require(_safeTransferETH(to, amount));
+    }
+
+    /**
+     * @notice Allows ownder to withdraw any accident tokens transferred to contract
+     * @param _tokenContract Address for the token
+     * @param to Address for token to be send to
+     * @param amount Amount of token to send
+     */
+    function withdrawToken(
+        address _tokenContract,
+        address to,
+        uint256 amount
+    ) external {
+        IERC20 tokenContract = IERC20(_tokenContract);
+        tokenContract.transfer(to, amount);
     }
 }

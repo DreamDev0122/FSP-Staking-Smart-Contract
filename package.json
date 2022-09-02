@@ -18,6 +18,7 @@
   "license": "UNLICENSED",
   "dependencies": {
     "@nomicfoundation/hardhat-network-helpers": "^1.0.4",
+    "@openzeppelin/contracts": "^4.7.3",
     "chai": "^4.3.6"
   }
 }

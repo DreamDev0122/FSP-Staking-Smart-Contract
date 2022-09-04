@@ -10,90 +10,8 @@ pragma solidity ^0.8.13;
 //                                                                                                                                                                                //
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 import "hardhat/console.sol";
-
-interface IERC20 {
-    /**
-     * @dev Returns the amount of tokens in existence.
-     */
-    function totalSupply() external view returns (uint256);
-
-    /**
-     * @dev Returns the amount of tokens owned by `account`.
-     */
-    function balanceOf(address account) external view returns (uint256);
-
-    /**
-     * @dev Moves `amount` tokens from the caller's account to `recipient`.
-     *
-     * Returns a boolean value indicating whether the operation succeeded.
-     *
-     * Emits a {Transfer} event.
-     */
-    function transfer(address recipient, uint256 amount)
-        external
-        returns (bool);
-
-    /**
-     * @dev Returns the remaining number of tokens that `spender` will be
-     * allowed to spend on behalf of `owner` through {transferFrom}. This is
-     * zero by default.
-     *
-     * This value changes when {approve} or {transferFrom} are called.
-     */
-    function allowance(address owner, address spender)
-        external
-        view
-        returns (uint256);
-
-    /**
-     * @dev Sets `amount` as the allowance of `spender` over the caller's tokens.
-     *
-     * Returns a boolean value indicating whether the operation succeeded.
-     *
-     * IMPORTANT: Beware that changing an allowance with this method brings the risk
-     * that someone may use both the old and the new allowance by unfortunate
-     * transaction ordering. One possible solution to mitigate this race
-     * condition is to first reduce the spender's allowance to 0 and set the
-     * desired value afterwards:
-     * https://github.com/ethereum/EIPs/issues/20#issuecomment-263524729
-     *
-     * Emits an {Approval} event.
-     */
-    function approve(address spender, uint256 amount) external returns (bool);
-
-    /**
-     * @dev Moves `amount` tokens from `sender` to `recipient` using the
-     * allowance mechanism. `amount` is then deducted from the caller's
-     * allowance.
-     *
-     * Returns a boolean value indicating whether the operation succeeded.
-     *
-     * Emits a {Transfer} event.
-     */
-    function transferFrom(
-        address sender,
-        address recipient,
-        uint256 amount
-    ) external returns (bool);
-
-    /**
-     * @dev Emitted when `value` tokens are moved from one account (`from`) to
-     * another (`to`).
-     *
-     * Note that `value` may be zero.
-     */
-    event Transfer(address indexed from, address indexed to, uint256 value);
-
-    /**
-     * @dev Emitted when the allowance of a `spender` for an `owner` is set by
-     * a call to {approve}. `value` is the new allowance.
-     */
-    event Approval(
-        address indexed owner,
-        address indexed spender,
-        uint256 value
-    );
-}
+import "@openzeppelin/contracts/utils/math/SafeMath.sol";
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 /**
  * @dev Interface for the optional metadata functions from the ERC20 standard.
@@ -690,6 +608,7 @@ interface IPancakeProfile {
 
 contract SmartChefInitializable is Ownable, ReentrancyGuard {
     using SafeERC20 for IERC20Metadata;
+    using SafeMath for uint256;
 
     // The address of the token to stake
     IERC20Metadata public stakedToken;
@@ -736,11 +655,15 @@ contract SmartChefInitializable is Ownable, ReentrancyGuard {
     // The block number of the last pool update
     uint256 public lastRewardBlock;
 
+    // Reward percent
+    uint256 public rewardPercent;
+
     // Info of each user that stakes tokens (stakedToken)
     mapping(address => UserInfo) public userInfo;
 
     struct UserInfo {
         uint256 amount; // How many staked tokens the user has provided
+        uint256 depositTime; //
     }
 
     event Deposit(address indexed user, uint256 amount);
@@ -779,7 +702,7 @@ contract SmartChefInitializable is Ownable, ReentrancyGuard {
         IERC20Metadata _reflectionToken,
         uint256 _rewardSupply,
         uint256 _APYPercent,
-        uint256 _lockTime,
+        uint256 _lockTimeType,
         uint256 _maxTokenSupply,
         uint256 _limitAmountPerUser,
         string memory _stakedTokenSymbol,
@@ -802,7 +725,19 @@ contract SmartChefInitializable is Ownable, ReentrancyGuard {
             userLimit = true;
             limitAmountPerUser = _limitAmountPerUser;
         }
-        lockTime = _lockTime;
+
+        lockTime = _lockTimeType == 0 ? 365 days : _lockTimeType == 1
+            ? 180 days
+            : _lockTimeType == 2
+            ? 90 days
+            : 30 days;
+
+        rewardPercent = _lockTimeType == 0 ? 100000 : _lockTimeType == 1
+            ? 49310
+            : _lockTimeType == 2
+            ? 24650
+            : 8291;
+
         stakedTokenSymbol = _stakedTokenSymbol;
         reflectionTokenSymbol = _reflectionTokenSymbol;
         maxTokenSupply = _maxTokenSupply;
@@ -835,6 +770,7 @@ contract SmartChefInitializable is Ownable, ReentrancyGuard {
 
         if (_amount > 0) {
             user.amount = user.amount + _amount;
+            user.depositTime = block.timestamp;
             stakedToken.safeTransferFrom(
                 address(msg.sender),
                 address(this),
@@ -855,6 +791,7 @@ contract SmartChefInitializable is Ownable, ReentrancyGuard {
         _updatePool();
 
         if (_amount > 0) {
+            uint256 rewardAmount = _getRewardAmount(_amount);
             user.amount = user.amount - _amount;
             stakedToken.safeTransfer(address(msg.sender), _amount);
         }
@@ -948,7 +885,8 @@ contract SmartChefInitializable is Ownable, ReentrancyGuard {
      */
     function pendingReward(address _user) external view returns (uint256) {
         UserInfo storage user = userInfo[_user];
-        
+        uint256 rewardAmount = user.amount;
+
         return 0;
     }
 
@@ -974,9 +912,10 @@ contract SmartChefInitializable is Ownable, ReentrancyGuard {
      * @notice Return reward amount of user.
      * @param _user: user address to calculate reward amount
      */
-    function _getRewardAmount(address _user) internal view returns (uint256) {
-        UserInfo memory user = userInfo[_user];
-        return 0;
+    function _getRewardAmount(uint256 amount) internal view returns (uint256) {
+        uint256 rewardAmount = (
+            ((amount.div(APYPercent)).mul(100)).div(rewardPercent)
+        ).mul(10**4);
     }
 
     /*
@@ -1057,15 +996,16 @@ contract SmartChefFactory is Ownable {
             )
         }
 
-        uint256 _maxTokenSupply = (
-            ((_rewardSupply / _APYPercent) * 100) / _lockTimeType == 0
-                ? rewardPercent1
-                : _lockTimeType == 1
-                ? rewardPercent2
-                : _lockTimeType == 2
-                ? rewardPercent3
-                : rewardPercent4
-        ) * 10**6;
+        uint256 rewardPercent = _lockTimeType == 0
+            ? rewardPercent1
+            : _lockTimeType == 1
+            ? rewardPercent2
+            : _lockTimeType == 2
+            ? rewardPercent3
+            : rewardPercent4;
+
+        uint256 _maxTokenSupply = (((_rewardSupply / _APYPercent) * 100) /
+            rewardPercent) * 10**6;
 
         IERC20(_stakedToken).transferFrom(
             msg.sender,
@@ -1078,7 +1018,7 @@ contract SmartChefFactory is Ownable {
             _reflectionToken,
             _rewardSupply,
             _APYPercent,
-            365 days,
+            _lockTimeType,
             _maxTokenSupply,
             _limitAmountPerUser,
             _stakedTokenSymbol,

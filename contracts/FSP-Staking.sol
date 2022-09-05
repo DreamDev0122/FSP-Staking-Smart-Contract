@@ -787,13 +787,18 @@ contract SmartChefInitializable is Ownable, ReentrancyGuard {
     function withdraw(uint256 _amount) external nonReentrant {
         UserInfo storage user = userInfo[msg.sender];
         require(user.amount >= _amount, "Amount to withdraw too high");
+        require(
+            user.depositTime + lockTime <= block.timestamp,
+            "You should wait until lock time"
+        );
 
         _updatePool();
 
         if (_amount > 0) {
             uint256 rewardAmount = _getRewardAmount(_amount);
+            console.log("rewardAmount:", rewardAmount);
             user.amount = user.amount - _amount;
-            stakedToken.safeTransfer(address(msg.sender), _amount);
+            stakedToken.safeTransfer(address(msg.sender), rewardAmount);
         }
 
         emit Withdraw(msg.sender, _amount);
@@ -885,9 +890,8 @@ contract SmartChefInitializable is Ownable, ReentrancyGuard {
      */
     function pendingReward(address _user) external view returns (uint256) {
         UserInfo storage user = userInfo[_user];
-        uint256 rewardAmount = user.amount;
-
-        return 0;
+        uint256 rewardAmount = _getRewardAmount(user.amount);
+        return rewardAmount;
     }
 
     /*
@@ -914,8 +918,10 @@ contract SmartChefInitializable is Ownable, ReentrancyGuard {
      */
     function _getRewardAmount(uint256 amount) internal view returns (uint256) {
         uint256 rewardAmount = (
-            ((amount.div(APYPercent)).mul(100)).div(rewardPercent)
-        ).mul(10**4);
+            ((amount.mul(APYPercent)).div(100)).mul(rewardPercent)
+        ).div(10**6);
+
+        return rewardAmount;
     }
 
     /*
@@ -972,6 +978,10 @@ contract SmartChefFactory is Ownable {
         string memory _reflectionTokenSymbol
     ) external payable {
         require(poolPrice <= msg.value, "Pool Price is not correct.");
+        require(
+            _lockTimeType >= 0 && _lockTimeType < 4,
+            "Lock Time Type is not correct"
+        );
         // require(_stakedToken.totalSupply() >= 0);
         // require(_reflectionToken.totalSupply() >= 0);
         require(

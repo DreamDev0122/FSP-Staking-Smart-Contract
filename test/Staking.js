@@ -36,7 +36,7 @@ describe("FSPStaking", function () {
           reflectionToken.address, // reflection Token
           1000, // Reward Supply
           20, // APY
-          30 * 86400, // lock time
+          0, // lock time
           100000, // limit amount per user
           "RFTX", // staked token symbol
           "BUSD" // reflection token symbol
@@ -52,7 +52,7 @@ describe("FSPStaking", function () {
           reflectionToken.address, // reflection Token
           1000000, // Reward Supply
           20, // APY
-          30 * 86400, // lock time
+          0, // lock time
           100000, // limit amount per user
           "RFTX", // staked token symbol
           "BUSD", // reflection token symbol
@@ -77,7 +77,7 @@ describe("FSPStaking", function () {
         reflectionToken.address, // reflection Token
         rewardSupply, // Reward Supply
         20, // APY
-        30 * 86400, // lock time
+        0, // lock time
         100000, // limit amount per user
         "RFTX", // staked token symbol
         "BUSD", // reflection token symbol
@@ -110,7 +110,7 @@ describe("FSPStaking", function () {
           BalloonTokenContract.address, // reflection Token
           rewardSupply, // Reward Supply
           20, // APY
-          30 * 86400, // lock time
+          0, // lock time
           100000, // limit amount per user
           "RFTX", // staked token symbol
           "BUSD", // reflection token symbol
@@ -118,6 +118,31 @@ describe("FSPStaking", function () {
           { value: poolPrice }
         )
       ).to.be.revertedWith("Tokens must be be different");
+    });
+
+    it("deployPool: Should fail if lock time type is not correct", async () => {
+      const poolPrice = await FSPStakingContract.poolPrice();
+      const rewardSupply = 100000000;
+
+      await BalloonTokenContract.approve(
+        FSPStakingContract.address,
+        rewardSupply
+      );
+
+      await expect(
+        FSPStakingContract.deployPool(
+          BalloonTokenContract.address, // stakedToken
+          reflectionToken.address, // reflection Token
+          rewardSupply, // Reward Supply
+          20, // APY
+          4, // lock time
+          100000, // limit amount per user
+          "RFTX", // staked token symbol
+          "BUSD", // reflection token symbol
+
+          { value: poolPrice }
+        )
+      ).to.be.revertedWith("Lock Time Type is not correct");
     });
 
     it("deployPool: Should work successfully if user pay the correct amount of pool price and send reward token amount to main contract", async () => {
@@ -135,7 +160,7 @@ describe("FSPStaking", function () {
           reflectionToken.address, // reflection Token
           rewardSupply, // Reward Supply
           20, // APY
-          30 * 86400, // lock time
+          0, // lock time
           100000, // limit amount per user
           "RFTX", // staked token symbol
           "BUSD", // reflection token symbol
@@ -160,7 +185,7 @@ describe("FSPStaking", function () {
         reflectionToken.address, // reflection Token
         rewardSupply, // Reward Supply
         20, // APY
-        30 * 86400, // lock time
+        0, // lock time
         100000, // limit amount per user
         "RFTX", // staked token symbol
         "BUSD", // reflection token symbol
@@ -188,7 +213,7 @@ describe("FSPStaking", function () {
         reflectionToken.address, // reflection Token
         rewardSupply, // Reward Supply
         20, // APY
-        30 * 86400, // lock time
+        0, // lock time
         100000, // limit amount per user
         "RFTX", // staked token symbol
         "BUSD", // reflection token symbol
@@ -232,7 +257,7 @@ describe("FSPStaking", function () {
         reflectionToken.address, // reflection Token
         rewardSupply, // Reward Supply
         20, // APY
-        30 * 86400, // lock time
+        0, // lock time
         100000, // limit amount per user
         "RFTX", // staked token symbol
         "BUSD", // reflection token symbol
@@ -250,9 +275,72 @@ describe("FSPStaking", function () {
       StakingPoolContract = await StakingPool.attach(data[0].args.smartChef);
     });
 
-    it("deposit: ", async () => {
-      const stakedTokenAddress = await StakingPoolContract.stakedToken();
-      
+    it("should be set all initial variables correctly", async () => {});
+
+    it("deposit: should fail if deposit amount exceed limit token amount", async () => {
+      const limitAmountPerUser = await StakingPoolContract.limitAmountPerUser();
+      await BalloonTokenContract.connect(user1).approve(
+        StakingPoolContract.address,
+        limitAmountPerUser + 100
+      );
+      await expect(
+        StakingPoolContract.connect(user1).deposit(limitAmountPerUser + 100)
+      ).to.be.revertedWith("Deposit: Amount above limit");
+    });
+
+    it("deposit: should work correctly", async () => {
+      await BalloonTokenContract.connect(user1).approve(
+        StakingPoolContract.address,
+        10000
+      );
+      await expect(StakingPoolContract.connect(user1).deposit(10000)).to.be.not
+        .reverted;
+    });
+
+    it("withdraw: should fail if withdraw amount is higher than deposited amount", async () => {
+      await BalloonTokenContract.connect(user1).approve(
+        StakingPoolContract.address,
+        10000
+      );
+      await StakingPoolContract.connect(user1).deposit(10000);
+      await expect(
+        StakingPoolContract.connect(user1).withdraw(10001)
+      ).to.be.revertedWith("Amount to withdraw too high");
+    });
+
+    it("withdraw: should fail if token is in lock time", async () => {
+      await BalloonTokenContract.connect(user1).approve(
+        StakingPoolContract.address,
+        10000
+      );
+      await StakingPoolContract.connect(user1).deposit(10000);
+      await expect(
+        StakingPoolContract.connect(user1).withdraw(10000)
+      ).to.be.revertedWith("You should wait until lock time");
+    });
+
+    it("withdraw: should work successfully if all info are correct", async () => {
+      const initialBalance = await BalloonTokenContract.balanceOf(
+        user1.address
+      );
+      await BalloonTokenContract.connect(user1).approve(
+        StakingPoolContract.address,
+        10000
+      );
+      await StakingPoolContract.connect(user1).deposit(10000);
+      await increaseTime(60 * 60 * 24 * 365);
+      await StakingPoolContract.connect(user1).withdraw(10000);
+      const balance = await BalloonTokenContract.balanceOf(user1.address);
+      console.log(initialBalance, balance);
     });
   });
 });
+
+const rpc = ({ method, params }) => {
+  return network.provider.send(method, params);
+};
+
+const increaseTime = async (seconds) => {
+  await rpc({ method: "evm_increaseTime", params: [seconds] });
+  return rpc({ method: "evm_mine" });
+};

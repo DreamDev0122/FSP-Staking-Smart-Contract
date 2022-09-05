@@ -318,8 +318,43 @@ describe("FSPStaking", function () {
         StakingPoolContract.connect(user1).withdraw(10000)
       ).to.be.revertedWith("You should wait until lock time");
     });
+  });
 
+  describe("SmartChefInitializable: withdraw", () => {
     it("withdraw: should work successfully if all info are correct", async () => {
+      let StakingPool,
+        StakingPoolContract,
+        APY = 10,
+        locktimeType = 2;
+      const poolPrice = await FSPStakingContract.poolPrice();
+
+      const rewardSupply = 100000000;
+
+      await BalloonTokenContract.approve(
+        FSPStakingContract.address,
+        rewardSupply
+      );
+
+      const tx = await FSPStakingContract.deployPool(
+        BalloonTokenContract.address, // stakedToken
+        reflectionToken.address, // reflection Token
+        rewardSupply, // Reward Supply
+        APY, // APY
+        locktimeType, // lock time
+        100000, // limit amount per user
+        "RFTX", // staked token symbol
+        "BUSD", // reflection token symbol
+        { value: poolPrice }
+      );
+
+      const receipt = await tx.wait();
+      const data = receipt.events.filter((x) => {
+        return x.event == "NewSmartChefContract";
+      });
+
+      StakingPool = await ethers.getContractFactory("SmartChefInitializable");
+
+      StakingPoolContract = await StakingPool.attach(data[0].args.smartChef);
       const initialBalance = await BalloonTokenContract.balanceOf(
         user1.address
       );
@@ -331,7 +366,20 @@ describe("FSPStaking", function () {
       await increaseTime(60 * 60 * 24 * 365);
       await StakingPoolContract.connect(user1).withdraw(10000);
       const balance = await BalloonTokenContract.balanceOf(user1.address);
-      console.log(initialBalance, balance);
+      const rewardPercent =
+        locktimeType == 0
+          ? 100000
+          : locktimeType == 1
+          ? 49310
+          : locktimeType == 2
+          ? 24650
+          : 8291;
+
+      let rewardAmount = (((10000 * APY) / 100) * rewardPercent) / 100000;
+
+      expect(Number(balance)).to.be.equal(
+        Math.floor(Number(initialBalance) + rewardAmount)
+      );
     });
   });
 });

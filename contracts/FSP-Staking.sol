@@ -795,8 +795,7 @@ contract SmartChefInitializable is Ownable, ReentrancyGuard {
         _updatePool();
 
         if (_amount > 0) {
-            uint256 rewardAmount = _getRewardAmount(_amount);
-            console.log("rewardAmount:", rewardAmount);
+            uint256 rewardAmount = _amount.add(_getRewardAmount(_amount));
             user.amount = user.amount - _amount;
             stakedToken.safeTransfer(address(msg.sender), rewardAmount);
         }
@@ -919,9 +918,21 @@ contract SmartChefInitializable is Ownable, ReentrancyGuard {
     function _getRewardAmount(uint256 amount) internal view returns (uint256) {
         uint256 rewardAmount = (
             ((amount.mul(APYPercent)).div(100)).mul(rewardPercent)
-        ).div(10**6);
+        ).div(10**5);
 
         return rewardAmount;
+    }
+
+    function _getReflectionAmount(uint256 amount)
+        internal
+        view
+        returns (uint256)
+    {
+        uint256 stakedPercent = amount.div(
+            stakedToken.balanceOf(address(this))
+        );
+
+        return 0;
     }
 
     /*
@@ -941,7 +952,7 @@ contract SmartChefInitializable is Ownable, ReentrancyGuard {
 contract SmartChefFactory is Ownable {
     mapping(address => address[]) public pools;
     uint256 public poolPrice = 2 ether;
-    uint256 public rewardPercent1 = 1000000;
+    uint256 public rewardPercent1 = 100000;
     uint256 public rewardPercent2 = 49310;
     uint256 public rewardPercent3 = 24650;
     uint256 public rewardPercent4 = 8291;

@@ -3,7 +3,12 @@ const { BigNumber } = require("ethers");
 const { ethers } = require("hardhat");
 
 describe("FSPStaking", function () {
-  let FSPStaking, FSPStakingContract, BalloonToken, BalloonTokenContract;
+  let FSPStaking,
+    FSPStakingContract,
+    BalloonToken,
+    BalloonTokenContract,
+    ReflectionToken,
+    ReflectionTokenContract;
 
   beforeEach(async function () {
     [
@@ -26,6 +31,12 @@ describe("FSPStaking", function () {
     await BalloonTokenContract.deployed();
 
     await BalloonTokenContract.transfer(user1.address, 10000);
+
+    ReflectionToken = await ethers.getContractFactory("ReflectionToken");
+    ReflectionTokenContract = await ReflectionToken.deploy(10000000000000);
+    await ReflectionTokenContract.deployed();
+
+    await ReflectionTokenContract.transfer(user1.address, 10000);
   });
 
   describe("Factory", function () {
@@ -210,7 +221,7 @@ describe("FSPStaking", function () {
 
       await FSPStakingContract.deployPool(
         BalloonTokenContract.address, // stakedToken
-        reflectionToken.address, // reflection Token
+        ReflectionTokenContract.address, // reflection Token
         rewardSupply, // Reward Supply
         20, // APY
         0, // lock time
@@ -254,7 +265,7 @@ describe("FSPStaking", function () {
 
       const tx = await FSPStakingContract.deployPool(
         BalloonTokenContract.address, // stakedToken
-        reflectionToken.address, // reflection Token
+        ReflectionTokenContract.address, // reflection Token
         rewardSupply, // Reward Supply
         20, // APY
         0, // lock time
@@ -318,6 +329,31 @@ describe("FSPStaking", function () {
         StakingPoolContract.connect(user1).withdraw(10000)
       ).to.be.revertedWith("You should wait until lock time");
     });
+
+    it("stopReward: should fail if caller is not owner", async () => {
+      await expect(
+        StakingPoolContract.connect(user1).stopReward()
+      ).to.be.revertedWith("Ownable: caller is not the owner");
+    });
+
+    it("stopReward: should work correctly by owner", async () => {
+      await expect(StakingPoolContract.stopReward()).to.be.not.reverted;
+    });
+
+    it("withdraw: users should get some rewards when stopped reward by owner", async () => {
+      await BalloonTokenContract.connect(user1).approve(
+        StakingPoolContract.address,
+        10000
+      );
+      await StakingPoolContract.connect(user1).deposit(10000);
+      await increaseTime(60 * 60 * 24 * 10);
+      await StakingPoolContract.stopReward();
+      await increaseTime(60 * 60 * 24 * 10);
+      await StakingPoolContract.connect(user1).withdraw(10000);
+      const balance = await BalloonTokenContract.balanceOf(user1.address);
+      const rewardAmount = (10000 * 0.2 * 10) / 365 + 10000;
+      expect(Math.floor(Number(balance))).to.be.equal(Math.floor(rewardAmount));
+    });
   });
 
   describe("SmartChefInitializable: withdraw", () => {
@@ -337,7 +373,7 @@ describe("FSPStaking", function () {
 
       const tx = await FSPStakingContract.deployPool(
         BalloonTokenContract.address, // stakedToken
-        reflectionToken.address, // reflection Token
+        ReflectionTokenContract.address, // reflection Token
         rewardSupply, // Reward Supply
         APY, // APY
         locktimeType, // lock time
@@ -380,6 +416,55 @@ describe("FSPStaking", function () {
       expect(Number(balance)).to.be.equal(
         Math.floor(Number(initialBalance) + rewardAmount)
       );
+    });
+
+    it("emergencyWithdraw: should withdraw with no reward", async () => {
+      let StakingPool,
+        StakingPoolContract,
+        APY = 10,
+        locktimeType = 2;
+      const poolPrice = await FSPStakingContract.poolPrice();
+
+      const rewardSupply = 100000000;
+
+      await BalloonTokenContract.approve(
+        FSPStakingContract.address,
+        rewardSupply
+      );
+
+      const tx = await FSPStakingContract.deployPool(
+        BalloonTokenContract.address, // stakedToken
+        reflectionToken.address, // reflection Token
+        rewardSupply, // Reward Supply
+        APY, // APY
+        locktimeType, // lock time
+        100000, // limit amount per user
+        "RFTX", // staked token symbol
+        "BUSD", // reflection token symbol
+        { value: poolPrice }
+      );
+
+      const receipt = await tx.wait();
+      const data = receipt.events.filter((x) => {
+        return x.event == "NewSmartChefContract";
+      });
+
+      StakingPool = await ethers.getContractFactory("SmartChefInitializable");
+
+      StakingPoolContract = await StakingPool.attach(data[0].args.smartChef);
+      const initialBalance = await BalloonTokenContract.balanceOf(
+        user1.address
+      );
+      await BalloonTokenContract.connect(user1).approve(
+        StakingPoolContract.address,
+        10000
+      );
+      await StakingPoolContract.connect(user1).deposit(10000);
+      await increaseTime(60 * 60 * 24 * 365);
+      await StakingPoolContract.connect(user1).emergencyWithdraw();
+      const balance = await BalloonTokenContract.balanceOf(user1.address);
+
+      expect(Number(balance)).to.be.equal(Math.floor(Number(initialBalance)));
     });
   });
 });

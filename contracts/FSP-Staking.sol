@@ -658,6 +658,10 @@ contract SmartChefInitializable is Ownable, ReentrancyGuard {
     // Reward percent
     uint256 public rewardPercent;
 
+    bool public isStopped;
+
+    uint256 private stopTime;
+
     // Info of each user that stakes tokens (stakedToken)
     mapping(address => UserInfo) public userInfo;
 
@@ -788,18 +792,26 @@ contract SmartChefInitializable is Ownable, ReentrancyGuard {
         UserInfo storage user = userInfo[msg.sender];
         require(user.amount >= _amount, "Amount to withdraw too high");
         require(
-            user.depositTime + lockTime <= block.timestamp,
+            isStopped || user.depositTime + lockTime <= block.timestamp,
             "You should wait until lock time"
         );
 
         _updatePool();
 
         if (_amount > 0) {
-            uint256 rewardAmount = _amount.add(_getRewardAmount(_amount));
+            uint256 rewardAmount = _amount.add(
+                _getRewardAmount(_amount, msg.sender)
+            );
             user.amount = user.amount - _amount;
             stakedToken.safeTransfer(address(msg.sender), rewardAmount);
         }
 
+        if (isReflectionToken) {
+            uint256 reflectionAmount = _getReflectionAmount(_amount);
+            if (reflectionAmount > 0) {
+                reflectionToken.transfer(address(msg.sender), reflectionAmount);
+            }
+        }
         emit Withdraw(msg.sender, _amount);
     }
 
@@ -811,6 +823,7 @@ contract SmartChefInitializable is Ownable, ReentrancyGuard {
         UserInfo storage user = userInfo[msg.sender];
         uint256 amountToTransfer = user.amount;
         user.amount = 0;
+        user.depositTime = 0;
 
         if (amountToTransfer > 0) {
             stakedToken.safeTransfer(address(msg.sender), amountToTransfer);
@@ -850,13 +863,14 @@ contract SmartChefInitializable is Ownable, ReentrancyGuard {
         emit TokenRecovery(_token, balance);
     }
 
-    // /*
-    //  * @notice Stop rewards
-    //  * @dev Only callable by owner
-    //  */
-    // function stopReward() external onlyOwner {
-    //     bonusEndBlock = block.number;
-    // }
+    /*
+     * @notice Stop rewards
+     * @dev Only callable by owner
+     */
+    function stopReward() external onlyOwner {
+        isStopped = true;
+        stopTime = block.timestamp;
+    }
 
     /*
      * @notice Update token amount limit per user
@@ -889,7 +903,9 @@ contract SmartChefInitializable is Ownable, ReentrancyGuard {
      */
     function pendingReward(address _user) external view returns (uint256) {
         UserInfo storage user = userInfo[_user];
-        uint256 rewardAmount = _getRewardAmount(user.amount);
+        uint256 rewardAmount = user.amount.add(
+            _getRewardAmount(user.amount, _user)
+        );
         return rewardAmount;
     }
 
@@ -915,10 +931,20 @@ contract SmartChefInitializable is Ownable, ReentrancyGuard {
      * @notice Return reward amount of user.
      * @param _user: user address to calculate reward amount
      */
-    function _getRewardAmount(uint256 amount) internal view returns (uint256) {
+    function _getRewardAmount(uint256 amount, address _user)
+        internal
+        view
+        returns (uint256)
+    {
         uint256 rewardAmount = (
             ((amount.mul(APYPercent)).div(100)).mul(rewardPercent)
         ).div(10**5);
+        if (isStopped) {
+            UserInfo memory user = userInfo[_user];
+            rewardAmount = rewardAmount.mul(stopTime.sub(user.depositTime)).div(
+                    lockTime
+                );
+        }
 
         return rewardAmount;
     }
@@ -928,11 +954,13 @@ contract SmartChefInitializable is Ownable, ReentrancyGuard {
         view
         returns (uint256)
     {
-        uint256 stakedPercent = amount.div(
-            stakedToken.balanceOf(address(this))
-        );
-
-        return 0;
+        uint256 reflectionAmount = 0;
+        if (isReflectionToken) {
+            reflectionAmount = (
+                amount.div(stakedToken.balanceOf(address(this)))
+            ).mul(reflectionToken.balanceOf(address(this)));
+        }
+        return reflectionAmount;
     }
 
     /*

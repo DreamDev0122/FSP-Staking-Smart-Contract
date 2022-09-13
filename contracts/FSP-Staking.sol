@@ -662,12 +662,18 @@ contract SmartChefInitializable is Ownable, ReentrancyGuard {
 
     uint256 private stopTime;
 
+    uint256 public depositFee = 0.007 ether;
+
+    uint256 public withdrawFee = 0.014 ether;
+
+    uint256 public emergencyWithdrawFee = 0.03 ether;
+
     // Info of each user that stakes tokens (stakedToken)
     mapping(address => UserInfo) public userInfo;
 
     struct UserInfo {
         uint256 amount; // How many staked tokens the user has provided
-        uint256 depositTime; //
+        uint256 depositTime;
     }
 
     event Deposit(address indexed user, uint256 amount);
@@ -753,7 +759,10 @@ contract SmartChefInitializable is Ownable, ReentrancyGuard {
      * @notice Deposit staked tokens and collect reward tokens (if any)
      * @param _amount: amount to withdraw (in rewardToken)
      */
-    function deposit(uint256 _amount) external nonReentrant {
+    function deposit(uint256 _amount) external payable nonReentrant {
+
+        require(msg.value >= getDepositFee(), "deposit fee is not enough");
+
         UserInfo storage user = userInfo[msg.sender];
 
         require(
@@ -788,7 +797,9 @@ contract SmartChefInitializable is Ownable, ReentrancyGuard {
      * @notice Withdraw staked tokens and collect reward tokens
      * @param _amount: amount to withdraw (in rewardToken)
      */
-    function withdraw(uint256 _amount) external nonReentrant {
+    function withdraw(uint256 _amount) external payable nonReentrant {
+        require(msg.value >= getWithdrawFee(), "withdraw fee is not enough");
+
         UserInfo storage user = userInfo[msg.sender];
         require(user.amount >= _amount, "Amount to withdraw too high");
         require(
@@ -819,7 +830,10 @@ contract SmartChefInitializable is Ownable, ReentrancyGuard {
      * @notice Withdraw staked tokens without caring about rewards rewards
      * @dev Needs to be for emergency.
      */
-    function emergencyWithdraw() external nonReentrant {
+    function emergencyWithdraw() external payable nonReentrant {
+
+        require(msg.value >= getEmergencyWithdrawFee(), "early withdraw fee is not enough");
+
         UserInfo storage user = userInfo[msg.sender];
         uint256 amountToTransfer = user.amount;
         user.amount = 0;
@@ -907,6 +921,18 @@ contract SmartChefInitializable is Ownable, ReentrancyGuard {
             _getRewardAmount(user.amount, _user)
         );
         return rewardAmount;
+    }
+
+    function getDepositFee() public view returns(uint256){
+        return depositFee.mul(rewardPercent).div(10**5);
+    }
+
+    function getWithdrawFee() public view returns (uint256){
+        return withdrawFee.mul(rewardPercent).div(10**5);
+    }
+
+    function getEmergencyWithdrawFee() public view returns(uint256){
+        return emergencyWithdrawFee.mul(rewardPercent).div(10 ** 5);
     }
 
     /*

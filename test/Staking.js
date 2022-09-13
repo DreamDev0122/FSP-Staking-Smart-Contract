@@ -294,9 +294,39 @@ describe("FSPStaking", function () {
         StakingPoolContract.address,
         limitAmountPerUser + 100
       );
+
+      const depositFee = await StakingPoolContract.getDepositFee();
+
       await expect(
-        StakingPoolContract.connect(user1).deposit(limitAmountPerUser + 100)
+        StakingPoolContract.connect(user1).deposit(limitAmountPerUser + 100, {
+          value: depositFee,
+        })
       ).to.be.revertedWith("Deposit: Amount above limit");
+    });
+
+    it("deposit: should fail if deposit fee is not enough", async () => {
+      const depositFee = await StakingPoolContract.getDepositFee();
+
+      await BalloonTokenContract.connect(user1).approve(
+        StakingPoolContract.address,
+        10000
+      );
+
+      await expect(
+        StakingPoolContract.connect(user1).deposit(10000, {
+          value: depositFee - 1,
+        })
+      ).to.be.revertedWith("deposit fee is not enough");
+    });
+
+    it("withdraw: should fail if withdraw fee is not enough", async () => {});
+
+    it("emergencyWithdraw: should fail if emergencyWithdraw fee is not enough", async () => {});
+
+    it("getDepositFee: should return the correct price", async () => {
+      const expected = await StakingPoolContract.getDepositFee();
+      const depositFee = await StakingPoolContract.depositFee();
+      expect(expected).to.be.equal((depositFee * 100000) / 100000);
     });
 
     it("deposit: should work correctly", async () => {
@@ -304,8 +334,12 @@ describe("FSPStaking", function () {
         StakingPoolContract.address,
         10000
       );
-      await expect(StakingPoolContract.connect(user1).deposit(10000)).to.be.not
-        .reverted;
+
+      const depositFee = await StakingPoolContract.getDepositFee();
+
+      await expect(
+        StakingPoolContract.connect(user1).deposit(10000, { value: depositFee })
+      ).to.be.not.reverted;
     });
 
     it("withdraw: should fail if withdraw amount is higher than deposited amount", async () => {
@@ -313,9 +347,15 @@ describe("FSPStaking", function () {
         StakingPoolContract.address,
         10000
       );
-      await StakingPoolContract.connect(user1).deposit(10000);
+      const depositFee = await StakingPoolContract.getDepositFee();
+      const withdrawFee = await StakingPoolContract.getWithdrawFee();
+      await StakingPoolContract.connect(user1).deposit(10000, {
+        value: depositFee,
+      });
       await expect(
-        StakingPoolContract.connect(user1).withdraw(10001)
+        StakingPoolContract.connect(user1).withdraw(10001, {
+          value: withdrawFee,
+        })
       ).to.be.revertedWith("Amount to withdraw too high");
     });
 
@@ -324,9 +364,16 @@ describe("FSPStaking", function () {
         StakingPoolContract.address,
         10000
       );
-      await StakingPoolContract.connect(user1).deposit(10000);
+      const depositFee = await StakingPoolContract.getDepositFee();
+      const withdrawFee = await StakingPoolContract.getWithdrawFee();
+
+      await StakingPoolContract.connect(user1).deposit(10000, {
+        value: depositFee,
+      });
       await expect(
-        StakingPoolContract.connect(user1).withdraw(10000)
+        StakingPoolContract.connect(user1).withdraw(10000, {
+          value: withdrawFee,
+        })
       ).to.be.revertedWith("You should wait until lock time");
     });
 
@@ -345,11 +392,17 @@ describe("FSPStaking", function () {
         StakingPoolContract.address,
         10000
       );
-      await StakingPoolContract.connect(user1).deposit(10000);
+      const depositFee = await StakingPoolContract.getDepositFee();
+      const withdrawFee = await StakingPoolContract.getWithdrawFee();
+      await StakingPoolContract.connect(user1).deposit(10000, {
+        value: depositFee,
+      });
       await increaseTime(60 * 60 * 24 * 10);
       await StakingPoolContract.stopReward();
       await increaseTime(60 * 60 * 24 * 10);
-      await StakingPoolContract.connect(user1).withdraw(10000);
+      await StakingPoolContract.connect(user1).withdraw(10000, {
+        value: withdrawFee,
+      });
       const balance = await BalloonTokenContract.balanceOf(user1.address);
       const rewardAmount = (10000 * 0.2 * 10) / 365 + 10000;
       expect(Math.floor(Number(balance))).to.be.equal(Math.floor(rewardAmount));
@@ -398,9 +451,17 @@ describe("FSPStaking", function () {
         StakingPoolContract.address,
         10000
       );
-      await StakingPoolContract.connect(user1).deposit(10000);
+
+      const depositFee = await StakingPoolContract.getDepositFee();
+      const withdrawFee = await StakingPoolContract.getWithdrawFee();
+
+      await StakingPoolContract.connect(user1).deposit(10000, {
+        value: depositFee,
+      });
       await increaseTime(60 * 60 * 24 * 365);
-      await StakingPoolContract.connect(user1).withdraw(10000);
+      await StakingPoolContract.connect(user1).withdraw(10000, {
+        value: withdrawFee,
+      });
       const balance = await BalloonTokenContract.balanceOf(user1.address);
       const rewardPercent =
         locktimeType == 0
@@ -459,9 +520,18 @@ describe("FSPStaking", function () {
         StakingPoolContract.address,
         10000
       );
-      await StakingPoolContract.connect(user1).deposit(10000);
+
+      const depositFee = await StakingPoolContract.getDepositFee();
+      const emergencyWithdraw =
+        await StakingPoolContract.getEmergencyWithdrawFee();
+
+      await StakingPoolContract.connect(user1).deposit(10000, {
+        value: depositFee,
+      });
       await increaseTime(60 * 60 * 24 * 365);
-      await StakingPoolContract.connect(user1).emergencyWithdraw();
+      await StakingPoolContract.connect(user1).emergencyWithdraw({
+        value: emergencyWithdraw,
+      });
       const balance = await BalloonTokenContract.balanceOf(user1.address);
 
       expect(Number(balance)).to.be.equal(Math.floor(Number(initialBalance)));

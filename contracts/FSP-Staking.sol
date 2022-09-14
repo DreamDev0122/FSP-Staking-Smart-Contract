@@ -834,6 +834,33 @@ contract SmartChefInitializable is Ownable, ReentrancyGuard {
         emit Withdraw(msg.sender, _amount);
     }
 
+    function withdrawAll() external payable nonReentrant {
+        require(msg.value >= getWithdrawFee(), "withdraw fee is not enough");
+
+        UserInfo storage user = userInfo[msg.sender];
+        require(
+            isStopped || user.depositTime + lockTime <= block.timestamp,
+            "You should wait until lock time"
+        );
+
+        // _updatePool();
+
+        if (user.amount > 0) {
+            uint256 rewardAmount = user.rewardDebt + user.amount + _getRewardAmount(user.amount, msg.sender);
+            user.amount = 0;
+            user.rewardDebt = 0;
+            stakedToken.safeTransfer(address(msg.sender), rewardAmount);
+        }
+
+        if (isReflectionToken) {
+            uint256 reflectionAmount = _getReflectionAmount(user.amount);
+            if (reflectionAmount > 0) {
+                reflectionToken.transfer(address(msg.sender), reflectionAmount);
+            }
+        }
+        emit Withdraw(msg.sender, user.amount);
+    }
+
     /*
      * @notice Withdraw staked tokens without caring about rewards rewards
      * @dev Needs to be for emergency.
@@ -848,6 +875,7 @@ contract SmartChefInitializable is Ownable, ReentrancyGuard {
         uint256 amountToTransfer = user.amount;
         user.amount = 0;
         user.depositTime = 0;
+        user.rewardDebt = 0;
 
         if (amountToTransfer > 0) {
             stakedToken.safeTransfer(address(msg.sender), amountToTransfer);
@@ -915,6 +943,17 @@ contract SmartChefInitializable is Ownable, ReentrancyGuard {
      */
     function _updatePool() internal {
       // TODO
+    }
+
+    /*
+     * @notice View function to see pending reward on frontend.
+     * @param _user: user address
+     * @return Pending reward for a given user
+     */
+    function pendingReward(address _user) external view returns (uint256) {
+        UserInfo storage user = userInfo[_user];
+        uint256 rewardAmount = user.rewardDebt + _getRewardAmount(user.amount, _user);
+        return rewardAmount;
     }
 
     /*

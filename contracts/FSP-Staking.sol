@@ -675,6 +675,7 @@ contract SmartChefInitializable is Ownable, ReentrancyGuard {
     struct UserInfo {
         uint256 amount; // How many staked tokens the user has provided
         uint256 depositTime; // Deposit time
+        uint256 rewardDebt; // Reward Debt
     }
 
     event Deposit(address indexed user, uint256 amount);
@@ -765,6 +766,7 @@ contract SmartChefInitializable is Ownable, ReentrancyGuard {
         transferOwnership(_admin);
     }
 
+    
     /*
      * @notice Deposit staked tokens and collect reward tokens (if any)
      * @param _amount: amount to deposit
@@ -781,6 +783,11 @@ contract SmartChefInitializable is Ownable, ReentrancyGuard {
 
         stakedUserList.push(msg.sender);
         // _updatePool();
+
+        if(user.amount > 0) {
+            uint256 reward = _getRewardAmount(user.amount, msg.sender);
+            user.rewardDebt += reward;
+        }
 
         if (_amount > 0) {
             user.amount = user.amount + _amount;
@@ -882,16 +889,7 @@ contract SmartChefInitializable is Ownable, ReentrancyGuard {
         emit NewUserLimitAmount(limitAmountPerUser);
     }
 
-    /*
-     * @notice View function to see pending reward on frontend.
-     * @param _user: user address
-     * @return Pending reward for a given user
-     */
-    function pendingReward(address _user) external view returns (uint256) {
-        UserInfo storage user = userInfo[_user];
-        return _getRewardAmount(user.amount, _user);
-    }
-
+    
     function getDepositFee() public view returns (uint256) {
         return depositFee.mul(rewardPercent).div(10**5);
     }

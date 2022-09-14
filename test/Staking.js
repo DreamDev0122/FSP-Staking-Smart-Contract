@@ -407,6 +407,18 @@ describe("FSPStaking", function () {
       const rewardAmount = (10000 * 0.2 * 10) / 365 + 10000;
       expect(Math.floor(Number(balance))).to.be.equal(Math.floor(rewardAmount));
     });
+
+    it("Reflection should work", async () => {
+
+    });
+
+    it("All fees should go to Platform Owner", async () => {})
+
+    it("Deposit several times from same address", async () => {})
+
+    it("pendingReward should work", async () => {})
+
+    
   });
 
   describe("SmartChefInitializable: withdraw", () => {

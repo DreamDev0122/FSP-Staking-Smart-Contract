@@ -670,6 +670,7 @@ contract SmartChefInitializable is Ownable, ReentrancyGuard {
 
     // Info of each user that stakes tokens (stakedToken)
     mapping(address => UserInfo) public userInfo;
+    address[] public stakedUserList;
 
     struct UserInfo {
         uint256 amount; // How many staked tokens the user has provided
@@ -778,6 +779,7 @@ contract SmartChefInitializable is Ownable, ReentrancyGuard {
             "Deposit: Amount above limit"
         );
 
+        stakedUserList.push(msg.sender);
         // _updatePool();
 
         if (_amount > 0) {
@@ -902,6 +904,14 @@ contract SmartChefInitializable is Ownable, ReentrancyGuard {
         return emergencyWithdrawFee.mul(rewardPercent).div(10**5);
     }
 
+    function getTotalStaked() public view returns (uint256) {
+       uint256 _totalStaked = 0;
+       for(uint256 id = 0; id < stakedUserList.length ; id++) {
+         _totalStaked += userInfo[stakedUserList[id]].amount;
+       }  
+       return _totalStaked;
+    }
+
     /*
      * @notice Update reward variables of the given pool to be up-to-date.
      */
@@ -960,20 +970,6 @@ contract SmartChefInitializable is Ownable, ReentrancyGuard {
         return true;
     }
 
-    /*
-     * @notice Return reward multiplier over the given _from to _to block.
-     * @param _from: block to start
-     * @param _to: block to finish
-     */
-    function _getMultiplier(uint256 _from, uint256 _to) internal view returns (uint256) {
-        if (_to <= bonusEndBlock) {
-            return _to.sub(_from);
-        } else if (_from >= bonusEndBlock) {
-            return 0;
-        } else {
-            return bonusEndBlock.sub(_from);
-        }
-    }
 }
 
 // File: contracts/SmartChefFactory.sol
@@ -983,7 +979,7 @@ contract SmartChefFactory is Ownable {
     uint256 public poolCreateFee = 2 ether;
     uint256 public rewardRatio1 = 100000; // 1 year Pool
     uint256 public rewardRatio2 = 49310; // 180 days Pool
-    uint256 public rewardRatio3 = 24650; // 90 days Pool
+    uint256 public rewardRatio3 = 24650; // 90 days Pool 
     uint256 public rewardRatio4 = 8291; // 30 days Pool
 
     event NewSmartChefContract(address indexed smartChef);
@@ -1069,7 +1065,7 @@ contract SmartChefFactory is Ownable {
         emit NewSmartChefContract(smartChefAddress);
     }
 
-    function updatePoolCreateFee(uint256 _poolPrice) external onlyOwner {
+    function updatePoolCreateFee(uint256 _poolCreateFee) external onlyOwner {
         poolCreateFee = _poolCreateFee;
     }
 

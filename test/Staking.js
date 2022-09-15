@@ -35,8 +35,6 @@ describe("FSPStaking", function () {
     ReflectionToken = await ethers.getContractFactory("ReflectionToken");
     ReflectionTokenContract = await ReflectionToken.deploy(10000000000000);
     await ReflectionTokenContract.deployed();
-
-    await ReflectionTokenContract.transfer(user1.address, 10000);
   });
 
   describe("Factory", function () {
@@ -44,7 +42,7 @@ describe("FSPStaking", function () {
       await expect(
         FSPStakingContract.deployPool(
           BalloonTokenContract.address, // stakedToken
-          reflectionToken.address, // reflection Token
+          ReflectionTokenContract.address, // reflection Token
           1000, // Reward Supply
           20, // APY
           0, // lock time
@@ -56,11 +54,11 @@ describe("FSPStaking", function () {
     });
 
     it("deployPool: Should fail if user didn't approve reward token amount into pool", async () => {
-      const poolPrice = await FSPStakingContract.poolPrice();
+      const poolCreateFee = await FSPStakingContract.poolCreateFee();
       await expect(
         FSPStakingContract.deployPool(
           BalloonTokenContract.address, // stakedToken
-          reflectionToken.address, // reflection Token
+          ReflectionTokenContract.address, // reflection Token
           1000000, // Reward Supply
           20, // APY
           0, // lock time
@@ -68,13 +66,13 @@ describe("FSPStaking", function () {
           "RFTX", // staked token symbol
           "BUSD", // reflection token symbol
 
-          { value: poolPrice }
+          { value: poolCreateFee }
         )
       ).to.be.revertedWith("ERC20: insufficient allowance");
     });
 
     it("deployPool: Should send reward token amount from main factory contract to pool contract", async () => {
-      const poolPrice = await FSPStakingContract.poolPrice();
+      const poolCreateFee = await FSPStakingContract.poolCreateFee();
 
       const rewardSupply = 100000000;
 
@@ -85,7 +83,7 @@ describe("FSPStaking", function () {
 
       const tx = await FSPStakingContract.deployPool(
         BalloonTokenContract.address, // stakedToken
-        reflectionToken.address, // reflection Token
+        ReflectionTokenContract.address, // reflection Token
         rewardSupply, // Reward Supply
         20, // APY
         0, // lock time
@@ -93,7 +91,7 @@ describe("FSPStaking", function () {
         "RFTX", // staked token symbol
         "BUSD", // reflection token symbol
 
-        { value: poolPrice }
+        { value: poolCreateFee }
       );
 
       const receipt = await tx.wait();
@@ -109,7 +107,7 @@ describe("FSPStaking", function () {
     });
 
     it("deployPool: Should fail if staked token and reflection token contract address are same", async () => {
-      const poolPrice = await FSPStakingContract.poolPrice();
+      const poolCreateFee = await FSPStakingContract.poolCreateFee();
       const rewardSupply = 100000000;
       await BalloonTokenContract.approve(
         FSPStakingContract.address,
@@ -126,13 +124,13 @@ describe("FSPStaking", function () {
           "RFTX", // staked token symbol
           "BUSD", // reflection token symbol
 
-          { value: poolPrice }
+          { value: poolCreateFee }
         )
       ).to.be.revertedWith("Tokens must be be different");
     });
 
     it("deployPool: Should fail if lock time type is not correct", async () => {
-      const poolPrice = await FSPStakingContract.poolPrice();
+      const poolCreateFee = await FSPStakingContract.poolCreateFee();
       const rewardSupply = 100000000;
 
       await BalloonTokenContract.approve(
@@ -143,7 +141,7 @@ describe("FSPStaking", function () {
       await expect(
         FSPStakingContract.deployPool(
           BalloonTokenContract.address, // stakedToken
-          reflectionToken.address, // reflection Token
+          ReflectionTokenContract.address, // reflection Token
           rewardSupply, // Reward Supply
           20, // APY
           4, // lock time
@@ -151,13 +149,13 @@ describe("FSPStaking", function () {
           "RFTX", // staked token symbol
           "BUSD", // reflection token symbol
 
-          { value: poolPrice }
+          { value: poolCreateFee }
         )
       ).to.be.revertedWith("Lock Time Type is not correct");
     });
 
     it("deployPool: Should work successfully if user pay the correct amount of pool price and send reward token amount to main contract", async () => {
-      const poolPrice = await FSPStakingContract.poolPrice();
+      const poolCreateFee = await FSPStakingContract.poolCreateFee();
       const rewardSupply = 100000000;
 
       await BalloonTokenContract.approve(
@@ -168,7 +166,7 @@ describe("FSPStaking", function () {
       await expect(
         FSPStakingContract.deployPool(
           BalloonTokenContract.address, // stakedToken
-          reflectionToken.address, // reflection Token
+          ReflectionTokenContract.address, // reflection Token
           rewardSupply, // Reward Supply
           20, // APY
           0, // lock time
@@ -176,41 +174,13 @@ describe("FSPStaking", function () {
           "RFTX", // staked token symbol
           "BUSD", // reflection token symbol
 
-          { value: poolPrice }
+          { value: poolCreateFee }
         )
       ).to.not.reverted;
     });
 
     it("withdraw: Should fail if caller is not owner", async () => {
-      const poolPrice = await FSPStakingContract.poolPrice();
-
-      const rewardSupply = 100000000;
-
-      await BalloonTokenContract.approve(
-        FSPStakingContract.address,
-        rewardSupply
-      );
-
-      await FSPStakingContract.deployPool(
-        BalloonTokenContract.address, // stakedToken
-        reflectionToken.address, // reflection Token
-        rewardSupply, // Reward Supply
-        20, // APY
-        0, // lock time
-        100000, // limit amount per user
-        "RFTX", // staked token symbol
-        "BUSD", // reflection token symbol
-
-        { value: poolPrice }
-      );
-
-      await expect(
-        FSPStakingContract.connect(badActor).withdraw(user1.address, 10)
-      ).to.be.revertedWith("Ownable: caller is not the owner");
-    });
-
-    it("withdraw: should work successfully if caller is owner", async () => {
-      const poolPrice = await FSPStakingContract.poolPrice();
+      const poolCreateFee = await FSPStakingContract.poolCreateFee();
 
       const rewardSupply = 100000000;
 
@@ -229,7 +199,35 @@ describe("FSPStaking", function () {
         "RFTX", // staked token symbol
         "BUSD", // reflection token symbol
 
-        { value: poolPrice }
+        { value: poolCreateFee }
+      );
+
+      await expect(
+        FSPStakingContract.connect(badActor).withdraw(user1.address, 10)
+      ).to.be.revertedWith("Ownable: caller is not the owner");
+    });
+
+    it("withdraw: should work successfully if caller is owner", async () => {
+      const poolCreateFee = await FSPStakingContract.poolCreateFee();
+
+      const rewardSupply = 100000000;
+
+      await BalloonTokenContract.approve(
+        FSPStakingContract.address,
+        rewardSupply
+      );
+
+      await FSPStakingContract.deployPool(
+        BalloonTokenContract.address, // stakedToken
+        ReflectionTokenContract.address, // reflection Token
+        rewardSupply, // Reward Supply
+        20, // APY
+        0, // lock time
+        100000, // limit amount per user
+        "RFTX", // staked token symbol
+        "BUSD", // reflection token symbol
+
+        { value: poolCreateFee }
       );
 
       const initialBalance = await FSPStakingContract.provider.getBalance(
@@ -238,14 +236,14 @@ describe("FSPStaking", function () {
 
       await FSPStakingContract.connect(deployer).withdraw(
         user1.address,
-        poolPrice
+        poolCreateFee
       );
 
       const expectBalance = await FSPStakingContract.provider.getBalance(
         user1.address
       );
 
-      expect(Number(initialBalance) + Number(poolPrice)).to.be.equal(
+      expect(Number(initialBalance) + Number(poolCreateFee)).to.be.equal(
         Number(expectBalance)
       );
     });
@@ -254,7 +252,7 @@ describe("FSPStaking", function () {
   describe("SmartChefInitializable", function () {
     let StakingPool, StakingPoolContract;
     beforeEach(async () => {
-      const poolPrice = await FSPStakingContract.poolPrice();
+      const poolCreateFee = await FSPStakingContract.poolCreateFee();
 
       const rewardSupply = 100000000;
 
@@ -273,7 +271,7 @@ describe("FSPStaking", function () {
         "RFTX", // staked token symbol
         "BUSD", // reflection token symbol
 
-        { value: poolPrice }
+        { value: poolCreateFee }
       );
 
       const receipt = await tx.wait();
@@ -284,6 +282,11 @@ describe("FSPStaking", function () {
       StakingPool = await ethers.getContractFactory("SmartChefInitializable");
 
       StakingPoolContract = await StakingPool.attach(data[0].args.smartChef);
+
+      await ReflectionTokenContract.transfer(
+        data[0].args.smartChef,
+        1000000000
+      );
     });
 
     it("should be set all initial variables correctly", async () => {});
@@ -371,7 +374,7 @@ describe("FSPStaking", function () {
         value: depositFee,
       });
       await expect(
-        StakingPoolContract.connect(user1).withdraw(10000, {
+        StakingPoolContract.connect(user1).withdrawAll({
           value: withdrawFee,
         })
       ).to.be.revertedWith("You should wait until lock time");
@@ -387,7 +390,7 @@ describe("FSPStaking", function () {
       await expect(StakingPoolContract.stopReward()).to.be.not.reverted;
     });
 
-    it("withdraw: users should get some rewards when stopped reward by owner", async () => {
+    it("withdrawAll: users should get some rewards when stopped reward by owner", async () => {
       await BalloonTokenContract.connect(user1).approve(
         StakingPoolContract.address,
         10000
@@ -400,7 +403,7 @@ describe("FSPStaking", function () {
       await increaseTime(60 * 60 * 24 * 10);
       await StakingPoolContract.stopReward();
       await increaseTime(60 * 60 * 24 * 10);
-      await StakingPoolContract.connect(user1).withdraw(10000, {
+      await StakingPoolContract.connect(user1).withdrawAll({
         value: withdrawFee,
       });
       const balance = await BalloonTokenContract.balanceOf(user1.address);
@@ -409,16 +412,858 @@ describe("FSPStaking", function () {
     });
 
     it("Reflection should work", async () => {
+      const depositFee = await StakingPoolContract.getDepositFee();
+      const withdrawFee = await StakingPoolContract.getWithdrawFee();
 
+      const initialBalance = await ReflectionTokenContract.balanceOf(
+        user1.address
+      );
+
+      await BalloonTokenContract.connect(user1).approve(
+        StakingPoolContract.address,
+        10000
+      );
+
+      await StakingPoolContract.connect(user1).deposit(10000, {
+        value: depositFee,
+      });
+
+      await increaseTime(60 * 60 * 24 * 365);
+
+      const platfromStakedBalance = await BalloonTokenContract.balanceOf(
+        StakingPoolContract.address
+      );
+
+      await StakingPoolContract.connect(user1).withdrawAll({
+        value: withdrawFee,
+      });
+      const balance = await ReflectionTokenContract.balanceOf(user1.address);
+      const platformBalance = await ReflectionTokenContract.balanceOf(
+        StakingPoolContract.address
+      );
+
+      expect(String(balance)).to.be.equal(
+        (
+          (Number(10000) / Number(platfromStakedBalance)) *
+          Number(1000000000) *
+          0.99
+        ).toFixed(0)
+      );
     });
 
-    it("All fees should go to Platform Owner", async () => {})
+    it("All fees should go to Platform Owner", async () => {
+      const initialBalance = await StakingPoolContract.provider.getBalance(
+        FSPStakingContract.address
+      );
+      const depositFee = await StakingPoolContract.getDepositFee();
+      const withdrawFee = await StakingPoolContract.getWithdrawFee();
+      const emergencyWithdrawFee =
+        await StakingPoolContract.getEmergencyWithdrawFee();
 
-    it("Deposit several times from same address", async () => {})
+      await BalloonTokenContract.connect(user1).approve(
+        StakingPoolContract.address,
+        10000
+      );
+      await StakingPoolContract.connect(user1).deposit(10000, {
+        value: depositFee,
+      });
 
-    it("pendingReward should work", async () => {})
+      const expected1 = await StakingPoolContract.provider.getBalance(
+        FSPStakingContract.address
+      );
 
-    
+      expect(Number(expected1)).to.be.equal(
+        Number(initialBalance) + Number(depositFee)
+      );
+
+      await increaseTime(60 * 60 * 24 * 365);
+
+      await StakingPoolContract.connect(user1).withdrawAll({
+        value: withdrawFee,
+      });
+
+      const expected2 = await StakingPoolContract.provider.getBalance(
+        FSPStakingContract.address
+      );
+
+      expect(Number(expected2)).to.be.equal(
+        Number(initialBalance) + Number(depositFee) + Number(withdrawFee)
+      );
+
+      await BalloonTokenContract.connect(user1).approve(
+        StakingPoolContract.address,
+        10000
+      );
+      await StakingPoolContract.connect(user1).deposit(10000, {
+        value: depositFee,
+      });
+
+      const expected3 = await StakingPoolContract.provider.getBalance(
+        FSPStakingContract.address
+      );
+
+      expect(Number(expected3)).to.be.equal(
+        Number(initialBalance) +
+          Number(depositFee) +
+          Number(withdrawFee) +
+          Number(depositFee)
+      );
+
+      await StakingPoolContract.connect(user1).emergencyWithdraw({
+        value: emergencyWithdrawFee,
+      });
+
+      const expected4 = await StakingPoolContract.provider.getBalance(
+        FSPStakingContract.address
+      );
+
+      expect(Number(expected4)).to.be.equal(
+        Number(initialBalance) +
+          Number(depositFee) +
+          Number(withdrawFee) +
+          Number(depositFee) +
+          Number(emergencyWithdrawFee)
+      );
+    });
+
+    it("Deposit several times from same address", async () => {
+      const depositFee = await StakingPoolContract.getDepositFee();
+      const withdrawFee = await StakingPoolContract.getWithdrawFee();
+
+      const initialBalance = await BalloonTokenContract.balanceOf(
+        user1.address
+      );
+
+      await BalloonTokenContract.connect(user1).approve(
+        StakingPoolContract.address,
+        10000
+      );
+      await StakingPoolContract.connect(user1).deposit(1000, {
+        value: depositFee,
+      });
+
+      await increaseTime(60 * 60 * 24 * 10);
+      const pendingReward1 = await StakingPoolContract.pendingReward(
+        user1.address
+      );
+      const expected1 = ((1000 * 0.2 * 10) / 365).toFixed(0);
+      expect(Number(pendingReward1)).to.be.equal(Number(expected1));
+      await StakingPoolContract.connect(user1).deposit(2000, {
+        value: depositFee,
+      });
+
+      await increaseTime(60 * 60 * 24 * 365);
+
+      const expected2 = Number((3000 * 0.2).toFixed(0)) + Number(expected1);
+      const pendingReward2 = await StakingPoolContract.pendingReward(
+        user1.address
+      );
+      expect(pendingReward2).to.be.equal(Number(expected2));
+      await StakingPoolContract.connect(user1).withdrawAll({
+        value: withdrawFee,
+      });
+
+      const balance = await BalloonTokenContract.balanceOf(user1.address);
+
+      expect(Number(balance)).to.be.equal(
+        Number(initialBalance) + Number(expected2)
+      );
+    });
+
+    it("pendingReward should work", async () => {
+      await BalloonTokenContract.connect(user1).approve(
+        StakingPoolContract.address,
+        10000
+      );
+      const depositFee = await StakingPoolContract.getDepositFee();
+      const withdrawFee = await StakingPoolContract.getWithdrawFee();
+      await StakingPoolContract.connect(user1).deposit(10000, {
+        value: depositFee,
+      });
+      await increaseTime(60 * 60 * 24 * 365);
+      const pendingReward = await StakingPoolContract.pendingReward(
+        user1.address
+      );
+
+      // console.log("pendingReward:", pendingReward);
+    });
+  });
+
+  describe("SmartChefInitializable: type 1", function () {
+    let StakingPool, StakingPoolContract;
+    beforeEach(async () => {
+      const poolCreateFee = await FSPStakingContract.poolCreateFee();
+
+      const rewardSupply = 100000000;
+
+      await BalloonTokenContract.approve(
+        FSPStakingContract.address,
+        rewardSupply
+      );
+
+      const tx = await FSPStakingContract.deployPool(
+        BalloonTokenContract.address, // stakedToken
+        ReflectionTokenContract.address, // reflection Token
+        rewardSupply, // Reward Supply
+        20, // APY
+        1, // lock time
+        100000, // limit amount per user
+        "RFTX", // staked token symbol
+        "BUSD", // reflection token symbol
+
+        { value: poolCreateFee }
+      );
+
+      const receipt = await tx.wait();
+      const data = receipt.events.filter((x) => {
+        return x.event == "NewSmartChefContract";
+      });
+
+      StakingPool = await ethers.getContractFactory("SmartChefInitializable");
+
+      StakingPoolContract = await StakingPool.attach(data[0].args.smartChef);
+
+      await ReflectionTokenContract.transfer(
+        data[0].args.smartChef,
+        1000000000
+      );
+    });
+
+    it("getDepositFee: should return the correct price", async () => {
+      const expected = await StakingPoolContract.getDepositFee();
+      const depositFee = await StakingPoolContract.depositFee();
+      expect(expected).to.be.equal((depositFee * 49310) / 100000);
+    });
+
+    it("deposit: should work correctly", async () => {
+      await BalloonTokenContract.connect(user1).approve(
+        StakingPoolContract.address,
+        10000
+      );
+
+      const depositFee = await StakingPoolContract.getDepositFee();
+
+      await expect(
+        StakingPoolContract.connect(user1).deposit(10000, { value: depositFee })
+      ).to.be.not.reverted;
+    });
+
+    it("withdraw: should fail if withdraw amount is higher than deposited amount", async () => {
+      await BalloonTokenContract.connect(user1).approve(
+        StakingPoolContract.address,
+        10000
+      );
+      const depositFee = await StakingPoolContract.getDepositFee();
+      const withdrawFee = await StakingPoolContract.getWithdrawFee();
+      await StakingPoolContract.connect(user1).deposit(10000, {
+        value: depositFee,
+      });
+      await expect(
+        StakingPoolContract.connect(user1).withdraw(10001, {
+          value: withdrawFee,
+        })
+      ).to.be.revertedWith("Amount to withdraw too high");
+    });
+
+    it("withdraw: should fail if token is in lock time", async () => {
+      await BalloonTokenContract.connect(user1).approve(
+        StakingPoolContract.address,
+        10000
+      );
+      const depositFee = await StakingPoolContract.getDepositFee();
+      const withdrawFee = await StakingPoolContract.getWithdrawFee();
+
+      await StakingPoolContract.connect(user1).deposit(10000, {
+        value: depositFee,
+      });
+      await expect(
+        StakingPoolContract.connect(user1).withdrawAll({
+          value: withdrawFee,
+        })
+      ).to.be.revertedWith("You should wait until lock time");
+    });
+
+    it("withdrawAll: users should get some rewards when stopped reward by owner", async () => {
+      await BalloonTokenContract.connect(user1).approve(
+        StakingPoolContract.address,
+        10000
+      );
+      const depositFee = await StakingPoolContract.getDepositFee();
+      const withdrawFee = await StakingPoolContract.getWithdrawFee();
+      await StakingPoolContract.connect(user1).deposit(10000, {
+        value: depositFee,
+      });
+      await increaseTime(60 * 60 * 24 * 10);
+      await StakingPoolContract.stopReward();
+      await increaseTime(60 * 60 * 24 * 10);
+      await StakingPoolContract.connect(user1).withdrawAll({
+        value: withdrawFee,
+      });
+      const balance = await BalloonTokenContract.balanceOf(user1.address);
+      const rewardAmount = (10000 * 0.2 * 0.4931 * 10) / 180 + 10000;
+      expect(Math.floor(Number(balance))).to.be.equal(Math.floor(rewardAmount));
+    });
+
+    it("Reflection should work", async () => {
+      const depositFee = await StakingPoolContract.getDepositFee();
+      const withdrawFee = await StakingPoolContract.getWithdrawFee();
+
+      const initialBalance = await ReflectionTokenContract.balanceOf(
+        user1.address
+      );
+
+      await BalloonTokenContract.connect(user1).approve(
+        StakingPoolContract.address,
+        10000
+      );
+
+      await StakingPoolContract.connect(user1).deposit(10000, {
+        value: depositFee,
+      });
+
+      await increaseTime(60 * 60 * 24 * 180);
+
+      const platfromStakedBalance = await BalloonTokenContract.balanceOf(
+        StakingPoolContract.address
+      );
+
+      await StakingPoolContract.connect(user1).withdrawAll({
+        value: withdrawFee,
+      });
+      const balance = await ReflectionTokenContract.balanceOf(user1.address);
+      const platformBalance = await ReflectionTokenContract.balanceOf(
+        StakingPoolContract.address
+      );
+
+      expect(String(balance)).to.be.equal(
+        (
+          (Number(10000) / Number(platfromStakedBalance)) *
+          Number(1000000000) *
+          0.99
+        ).toFixed(0)
+      );
+    });
+
+    it("Deposit several times from same address", async () => {
+      const depositFee = await StakingPoolContract.getDepositFee();
+      const withdrawFee = await StakingPoolContract.getWithdrawFee();
+
+      const initialBalance = await BalloonTokenContract.balanceOf(
+        user1.address
+      );
+
+      await BalloonTokenContract.connect(user1).approve(
+        StakingPoolContract.address,
+        10000
+      );
+      await StakingPoolContract.connect(user1).deposit(1000, {
+        value: depositFee,
+      });
+
+      await increaseTime(60 * 60 * 24 * 10);
+      const pendingReward1 = await StakingPoolContract.pendingReward(
+        user1.address
+      );
+      const expected1 = (((1000 * 0.2 * 10) / 180) * 0.4931).toFixed(0);
+      expect(Number(pendingReward1)).to.be.equal(Number(expected1));
+      await StakingPoolContract.connect(user1).deposit(2000, {
+        value: depositFee,
+      });
+
+      await increaseTime(60 * 60 * 24 * 180);
+
+      const expected2 =
+        Number((3000 * 0.2 * 0.4931).toFixed(0)) + Number(expected1);
+      const pendingReward2 = await StakingPoolContract.pendingReward(
+        user1.address
+      );
+      expect(pendingReward2).to.be.least(Number(expected2) - 1);
+      expect(pendingReward2).to.be.most(Number(expected2) + 1);
+
+      await StakingPoolContract.connect(user1).withdrawAll({
+        value: withdrawFee,
+      });
+
+      const balance = await BalloonTokenContract.balanceOf(user1.address);
+
+      expect(Number(balance)).to.be.least(
+        Number(initialBalance) + Number(expected2) - 1
+      );
+
+      expect(Number(balance)).to.be.most(
+        Number(initialBalance) + Number(expected2) + 1
+      );
+    });
+
+    it("pendingReward should work", async () => {
+      await BalloonTokenContract.connect(user1).approve(
+        StakingPoolContract.address,
+        10000
+      );
+      const depositFee = await StakingPoolContract.getDepositFee();
+      const withdrawFee = await StakingPoolContract.getWithdrawFee();
+      await StakingPoolContract.connect(user1).deposit(10000, {
+        value: depositFee,
+      });
+      await increaseTime(60 * 60 * 24 * 365);
+      const pendingReward = await StakingPoolContract.pendingReward(
+        user1.address
+      );
+
+      expect(String(pendingReward)).to.be.equal(
+        (10000 * 0.2 * 0.4931).toFixed(0)
+      );
+    });
+  });
+
+  describe("SmartChefInitializable: type 2", function () {
+    let StakingPool, StakingPoolContract;
+    beforeEach(async () => {
+      const poolCreateFee = await FSPStakingContract.poolCreateFee();
+
+      const rewardSupply = 100000000;
+
+      await BalloonTokenContract.approve(
+        FSPStakingContract.address,
+        rewardSupply
+      );
+
+      const tx = await FSPStakingContract.deployPool(
+        BalloonTokenContract.address, // stakedToken
+        ReflectionTokenContract.address, // reflection Token
+        rewardSupply, // Reward Supply
+        20, // APY
+        2, // lock time
+        100000, // limit amount per user
+        "RFTX", // staked token symbol
+        "BUSD", // reflection token symbol
+
+        { value: poolCreateFee }
+      );
+
+      const receipt = await tx.wait();
+      const data = receipt.events.filter((x) => {
+        return x.event == "NewSmartChefContract";
+      });
+
+      StakingPool = await ethers.getContractFactory("SmartChefInitializable");
+
+      StakingPoolContract = await StakingPool.attach(data[0].args.smartChef);
+
+      await ReflectionTokenContract.transfer(
+        data[0].args.smartChef,
+        1000000000
+      );
+    });
+
+    it("getDepositFee: should return the correct price", async () => {
+      const expected = await StakingPoolContract.getDepositFee();
+      const depositFee = await StakingPoolContract.depositFee();
+      expect(expected).to.be.equal((depositFee * 24650) / 100000);
+    });
+
+    it("deposit: should work correctly", async () => {
+      await BalloonTokenContract.connect(user1).approve(
+        StakingPoolContract.address,
+        10000
+      );
+
+      const depositFee = await StakingPoolContract.getDepositFee();
+
+      await expect(
+        StakingPoolContract.connect(user1).deposit(10000, { value: depositFee })
+      ).to.be.not.reverted;
+    });
+
+    it("withdraw: should fail if withdraw amount is higher than deposited amount", async () => {
+      await BalloonTokenContract.connect(user1).approve(
+        StakingPoolContract.address,
+        10000
+      );
+      const depositFee = await StakingPoolContract.getDepositFee();
+      const withdrawFee = await StakingPoolContract.getWithdrawFee();
+      await StakingPoolContract.connect(user1).deposit(10000, {
+        value: depositFee,
+      });
+      await expect(
+        StakingPoolContract.connect(user1).withdraw(10001, {
+          value: withdrawFee,
+        })
+      ).to.be.revertedWith("Amount to withdraw too high");
+    });
+
+    it("withdraw: should fail if token is in lock time", async () => {
+      await BalloonTokenContract.connect(user1).approve(
+        StakingPoolContract.address,
+        10000
+      );
+      const depositFee = await StakingPoolContract.getDepositFee();
+      const withdrawFee = await StakingPoolContract.getWithdrawFee();
+
+      await StakingPoolContract.connect(user1).deposit(10000, {
+        value: depositFee,
+      });
+      await expect(
+        StakingPoolContract.connect(user1).withdrawAll({
+          value: withdrawFee,
+        })
+      ).to.be.revertedWith("You should wait until lock time");
+    });
+
+    it("withdrawAll: users should get some rewards when stopped reward by owner", async () => {
+      await BalloonTokenContract.connect(user1).approve(
+        StakingPoolContract.address,
+        10000
+      );
+      const depositFee = await StakingPoolContract.getDepositFee();
+      const withdrawFee = await StakingPoolContract.getWithdrawFee();
+      await StakingPoolContract.connect(user1).deposit(10000, {
+        value: depositFee,
+      });
+      await increaseTime(60 * 60 * 24 * 10);
+      await StakingPoolContract.stopReward();
+      await increaseTime(60 * 60 * 24 * 10);
+      await StakingPoolContract.connect(user1).withdrawAll({
+        value: withdrawFee,
+      });
+      const balance = await BalloonTokenContract.balanceOf(user1.address);
+      const rewardAmount = (10000 * 0.2 * 0.2465 * 10) / 90 + 10000;
+      expect(Math.floor(Number(balance))).to.be.equal(Math.floor(rewardAmount));
+    });
+
+    it("Reflection should work", async () => {
+      const depositFee = await StakingPoolContract.getDepositFee();
+      const withdrawFee = await StakingPoolContract.getWithdrawFee();
+
+      const initialBalance = await ReflectionTokenContract.balanceOf(
+        user1.address
+      );
+
+      await BalloonTokenContract.connect(user1).approve(
+        StakingPoolContract.address,
+        10000
+      );
+
+      await StakingPoolContract.connect(user1).deposit(10000, {
+        value: depositFee,
+      });
+
+      await increaseTime(60 * 60 * 24 * 365);
+
+      const platfromStakedBalance = await BalloonTokenContract.balanceOf(
+        StakingPoolContract.address
+      );
+
+      await StakingPoolContract.connect(user1).withdrawAll({
+        value: withdrawFee,
+      });
+      const balance = await ReflectionTokenContract.balanceOf(user1.address);
+      const platformBalance = await ReflectionTokenContract.balanceOf(
+        StakingPoolContract.address
+      );
+
+      expect(String(balance)).to.be.equal(
+        (
+          (Number(10000) / Number(platfromStakedBalance)) *
+          Number(1000000000) *
+          0.99
+        ).toFixed(0)
+      );
+    });
+
+    it("Deposit several times from same address", async () => {
+      const depositFee = await StakingPoolContract.getDepositFee();
+      const withdrawFee = await StakingPoolContract.getWithdrawFee();
+
+      const initialBalance = await BalloonTokenContract.balanceOf(
+        user1.address
+      );
+
+      await BalloonTokenContract.connect(user1).approve(
+        StakingPoolContract.address,
+        10000
+      );
+      await StakingPoolContract.connect(user1).deposit(1000, {
+        value: depositFee,
+      });
+
+      await increaseTime(60 * 60 * 24 * 10);
+      const pendingReward1 = await StakingPoolContract.pendingReward(
+        user1.address
+      );
+      const expected1 = (((1000 * 0.2 * 10) / 90) * 0.2465).toFixed(0);
+      expect(Number(pendingReward1)).to.be.equal(Number(expected1));
+      await StakingPoolContract.connect(user1).deposit(2000, {
+        value: depositFee,
+      });
+
+      await increaseTime(60 * 60 * 24 * 90);
+
+      const expected2 =
+        Number((3000 * 0.2 * 0.2465).toFixed(0)) + Number(expected1);
+      const pendingReward2 = await StakingPoolContract.pendingReward(
+        user1.address
+      );
+      expect(pendingReward2).to.be.least(Number(expected2) - 1);
+      expect(pendingReward2).to.be.most(Number(expected2) + 1);
+
+      await StakingPoolContract.connect(user1).withdrawAll({
+        value: withdrawFee,
+      });
+
+      const balance = await BalloonTokenContract.balanceOf(user1.address);
+
+      expect(Number(balance)).to.be.least(
+        Number(initialBalance) + Number(expected2) - 1
+      );
+
+      expect(Number(balance)).to.be.most(
+        Number(initialBalance) + Number(expected2) + 1
+      );
+    });
+
+    it("pendingReward should work", async () => {
+      await BalloonTokenContract.connect(user1).approve(
+        StakingPoolContract.address,
+        10000
+      );
+      const depositFee = await StakingPoolContract.getDepositFee();
+      const withdrawFee = await StakingPoolContract.getWithdrawFee();
+      await StakingPoolContract.connect(user1).deposit(10000, {
+        value: depositFee,
+      });
+      await increaseTime(60 * 60 * 24 * 90);
+      const pendingReward = await StakingPoolContract.pendingReward(
+        user1.address
+      );
+
+      expect(String(pendingReward)).to.be.equal(
+        (10000 * 0.2 * 0.2465).toFixed(0)
+      );
+    });
+  });
+
+  describe("SmartChefInitializable: type 3", function () {
+    let StakingPool, StakingPoolContract;
+    beforeEach(async () => {
+      const poolCreateFee = await FSPStakingContract.poolCreateFee();
+
+      const rewardSupply = 100000000;
+
+      await BalloonTokenContract.approve(
+        FSPStakingContract.address,
+        rewardSupply
+      );
+
+      const tx = await FSPStakingContract.deployPool(
+        BalloonTokenContract.address, // stakedToken
+        ReflectionTokenContract.address, // reflection Token
+        rewardSupply, // Reward Supply
+        20, // APY
+        3, // lock time
+        100000, // limit amount per user
+        "RFTX", // staked token symbol
+        "BUSD", // reflection token symbol
+
+        { value: poolCreateFee }
+      );
+
+      const receipt = await tx.wait();
+      const data = receipt.events.filter((x) => {
+        return x.event == "NewSmartChefContract";
+      });
+
+      StakingPool = await ethers.getContractFactory("SmartChefInitializable");
+
+      StakingPoolContract = await StakingPool.attach(data[0].args.smartChef);
+
+      await ReflectionTokenContract.transfer(
+        data[0].args.smartChef,
+        1000000000
+      );
+    });
+
+    it("getDepositFee: should return the correct price", async () => {
+      const expected = await StakingPoolContract.getDepositFee();
+      const depositFee = await StakingPoolContract.depositFee();
+      expect(expected).to.be.equal((depositFee * 8291) / 100000);
+    });
+
+    it("deposit: should work correctly", async () => {
+      await BalloonTokenContract.connect(user1).approve(
+        StakingPoolContract.address,
+        10000
+      );
+
+      const depositFee = await StakingPoolContract.getDepositFee();
+
+      await expect(
+        StakingPoolContract.connect(user1).deposit(10000, { value: depositFee })
+      ).to.be.not.reverted;
+    });
+
+    it("withdraw: should fail if withdraw amount is higher than deposited amount", async () => {
+      await BalloonTokenContract.connect(user1).approve(
+        StakingPoolContract.address,
+        10000
+      );
+      const depositFee = await StakingPoolContract.getDepositFee();
+      const withdrawFee = await StakingPoolContract.getWithdrawFee();
+      await StakingPoolContract.connect(user1).deposit(10000, {
+        value: depositFee,
+      });
+      await expect(
+        StakingPoolContract.connect(user1).withdraw(10001, {
+          value: withdrawFee,
+        })
+      ).to.be.revertedWith("Amount to withdraw too high");
+    });
+
+    it("withdraw: should fail if token is in lock time", async () => {
+      await BalloonTokenContract.connect(user1).approve(
+        StakingPoolContract.address,
+        10000
+      );
+      const depositFee = await StakingPoolContract.getDepositFee();
+      const withdrawFee = await StakingPoolContract.getWithdrawFee();
+
+      await StakingPoolContract.connect(user1).deposit(10000, {
+        value: depositFee,
+      });
+      await expect(
+        StakingPoolContract.connect(user1).withdrawAll({
+          value: withdrawFee,
+        })
+      ).to.be.revertedWith("You should wait until lock time");
+    });
+
+    it("withdrawAll: users should get some rewards when stopped reward by owner", async () => {
+      await BalloonTokenContract.connect(user1).approve(
+        StakingPoolContract.address,
+        10000
+      );
+      const depositFee = await StakingPoolContract.getDepositFee();
+      const withdrawFee = await StakingPoolContract.getWithdrawFee();
+      await StakingPoolContract.connect(user1).deposit(10000, {
+        value: depositFee,
+      });
+      await increaseTime(60 * 60 * 24 * 10);
+      await StakingPoolContract.stopReward();
+      await increaseTime(60 * 60 * 24 * 10);
+      await StakingPoolContract.connect(user1).withdrawAll({
+        value: withdrawFee,
+      });
+      const balance = await BalloonTokenContract.balanceOf(user1.address);
+      const rewardAmount = (10000 * 0.2 * 0.08291 * 10) / 30 + 10000;
+      expect(Math.floor(Number(balance))).to.be.equal(Math.floor(rewardAmount));
+    });
+
+    it("Reflection should work", async () => {
+      const depositFee = await StakingPoolContract.getDepositFee();
+      const withdrawFee = await StakingPoolContract.getWithdrawFee();
+
+      const initialBalance = await ReflectionTokenContract.balanceOf(
+        user1.address
+      );
+
+      await BalloonTokenContract.connect(user1).approve(
+        StakingPoolContract.address,
+        10000
+      );
+
+      await StakingPoolContract.connect(user1).deposit(10000, {
+        value: depositFee,
+      });
+
+      await increaseTime(60 * 60 * 24 * 30);
+
+      const platfromStakedBalance = await BalloonTokenContract.balanceOf(
+        StakingPoolContract.address
+      );
+
+      await StakingPoolContract.connect(user1).withdrawAll({
+        value: withdrawFee,
+      });
+      const balance = await ReflectionTokenContract.balanceOf(user1.address);
+      const platformBalance = await ReflectionTokenContract.balanceOf(
+        StakingPoolContract.address
+      );
+
+      expect(String(balance)).to.be.equal(
+        (
+          (Number(10000) / Number(platfromStakedBalance)) *
+          Number(1000000000) *
+          0.99
+        ).toFixed(0)
+      );
+    });
+
+    it("Deposit several times from same address", async () => {
+      const depositFee = await StakingPoolContract.getDepositFee();
+      const withdrawFee = await StakingPoolContract.getWithdrawFee();
+
+      const initialBalance = await BalloonTokenContract.balanceOf(
+        user1.address
+      );
+
+      await BalloonTokenContract.connect(user1).approve(
+        StakingPoolContract.address,
+        10000
+      );
+
+      await StakingPoolContract.connect(user1).deposit(1000, {
+        value: depositFee,
+      });
+
+      await increaseTime(60 * 60 * 24 * 10);
+
+      const pendingReward1 = await StakingPoolContract.pendingReward(
+        user1.address
+      );
+
+      const expected1 = Math.floor(((1000 * 0.2 * 10) / 30) * 0.08291);
+      expect(Number(pendingReward1)).to.be.equal(Number(expected1));
+      await StakingPoolContract.connect(user1).deposit(2000, {
+        value: depositFee,
+      });
+
+      await increaseTime(60 * 60 * 24 * 90);
+
+      const expected2 = Math.floor(3000 * 0.2 * 0.08291) + Number(expected1);
+      const pendingReward2 = await StakingPoolContract.pendingReward(
+        user1.address
+      );
+      expect(pendingReward2).to.be.equal(Number(expected2));
+
+      await StakingPoolContract.connect(user1).withdrawAll({
+        value: withdrawFee,
+      });
+
+      const balance = await BalloonTokenContract.balanceOf(user1.address);
+
+      expect(Number(balance)).to.be.equal(
+        Number(initialBalance) + Number(expected2)
+      );
+    });
+
+    it("pendingReward should work", async () => {
+      await BalloonTokenContract.connect(user1).approve(
+        StakingPoolContract.address,
+        10000
+      );
+      const depositFee = await StakingPoolContract.getDepositFee();
+      await StakingPoolContract.connect(user1).deposit(10000, {
+        value: depositFee,
+      });
+      await increaseTime(60 * 60 * 24 * 90);
+      const pendingReward = await StakingPoolContract.pendingReward(
+        user1.address
+      );
+
+      expect(Number(pendingReward)).to.be.equal(
+        Math.floor(10000 * 0.2 * 0.08291)
+      );
+    });
   });
 
   describe("SmartChefInitializable: withdraw", () => {
@@ -427,7 +1272,7 @@ describe("FSPStaking", function () {
         StakingPoolContract,
         APY = 10,
         locktimeType = 2;
-      const poolPrice = await FSPStakingContract.poolPrice();
+      const poolCreateFee = await FSPStakingContract.poolCreateFee();
 
       const rewardSupply = 100000000;
 
@@ -445,7 +1290,7 @@ describe("FSPStaking", function () {
         100000, // limit amount per user
         "RFTX", // staked token symbol
         "BUSD", // reflection token symbol
-        { value: poolPrice }
+        { value: poolCreateFee }
       );
 
       const receipt = await tx.wait();
@@ -471,7 +1316,7 @@ describe("FSPStaking", function () {
         value: depositFee,
       });
       await increaseTime(60 * 60 * 24 * 365);
-      await StakingPoolContract.connect(user1).withdraw(10000, {
+      await StakingPoolContract.connect(user1).withdrawAll({
         value: withdrawFee,
       });
       const balance = await BalloonTokenContract.balanceOf(user1.address);
@@ -496,7 +1341,7 @@ describe("FSPStaking", function () {
         StakingPoolContract,
         APY = 10,
         locktimeType = 2;
-      const poolPrice = await FSPStakingContract.poolPrice();
+      const poolCreateFee = await FSPStakingContract.poolCreateFee();
 
       const rewardSupply = 100000000;
 
@@ -507,14 +1352,14 @@ describe("FSPStaking", function () {
 
       const tx = await FSPStakingContract.deployPool(
         BalloonTokenContract.address, // stakedToken
-        reflectionToken.address, // reflection Token
+        ReflectionTokenContract.address, // reflection Token
         rewardSupply, // Reward Supply
         APY, // APY
         locktimeType, // lock time
         100000, // limit amount per user
         "RFTX", // staked token symbol
         "BUSD", // reflection token symbol
-        { value: poolPrice }
+        { value: poolCreateFee }
       );
 
       const receipt = await tx.wait();

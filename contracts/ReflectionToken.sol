@@ -39,7 +39,7 @@ contract ReflectionToken is ERC20, Ownable {
         _;
     }
 
-    constructor(uint256 initialSupply) ERC20("Balloon Token", "BALLOON") {
+    constructor(uint256 initialSupply) ERC20("Reflection", "RFX") {
         _mint(msg.sender, initialSupply * 10**decimals());
     }
 

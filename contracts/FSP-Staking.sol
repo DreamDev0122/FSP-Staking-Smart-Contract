@@ -698,30 +698,28 @@ contract SmartChefInitializable is Ownable, ReentrancyGuard {
         SMART_CHEF_FACTORY = msg.sender;
     }
 
-    /*
-     * @notice Initialize the contract
-     * @param _stakedToken: staked token address
-     * @param _reflectionToken: _reflectionToken token address
-     * @param _rewardSupply: Reward Supply Amount
-     * @param _APYPercent: APY
-     * @param _lockTimeType: Lock Time Type 
-               0 - 1 year 
-               1- 180 days 
-               2- 90 days 
-               3 - 30 days
-     * @param _maxTokenSupply: Max Token Supply Amount
-     * @param _limitAmountPerUser: Pool limit per user in stakedToken
-     * @param _stakedTokenSymbol: staked token symbol
-     * @param _reflectionTokenSymbol: reflection token symbol
-     * @param _admin: admin address with ownership
-     */
+    // /*
+    //  * @notice Initialize the contract
+    //  * @param _stakedToken: staked token address
+    //  * @param _reflectionToken: _reflectionToken token address
+    //  * @param _rewardSupply: Reward Supply Amount
+    //  * @param _APYPercent: APY
+    //  * @param _lockTimeType: Lock Time Type 
+    //            0 - 1 year 
+    //            1- 180 days 
+    //            2- 90 days 
+    //            3 - 30 days
+    //  * @param _limitAmountPerUser: Pool limit per user in stakedToken
+    //  * @param _stakedTokenSymbol: staked token symbol
+    //  * @param _reflectionTokenSymbol: reflection token symbol
+    //  * @param _admin: admin address with ownership
+    //  */
     function initialize(
         IERC20Metadata _stakedToken,
         IERC20Metadata _reflectionToken,
         uint256 _rewardSupply,
         uint256 _APYPercent,
         uint256 _lockTimeType,
-        uint256 _maxTokenSupply,
         uint256 _limitAmountPerUser,
         string memory _stakedTokenSymbol,
         string memory _reflectionTokenSymbol,
@@ -759,7 +757,8 @@ contract SmartChefInitializable is Ownable, ReentrancyGuard {
 
         stakedTokenSymbol = _stakedTokenSymbol;
         reflectionTokenSymbol = _reflectionTokenSymbol;
-        maxTokenSupply = _maxTokenSupply;
+        maxTokenSupply = (((_rewardSupply / _APYPercent) * 100) /
+            rewardPercent) * 10**5;
         rewardSupply = _rewardSupply;
 
         // Transfer ownership to the admin address who becomes owner of the contract
@@ -773,7 +772,7 @@ contract SmartChefInitializable is Ownable, ReentrancyGuard {
      */
     function deposit(uint256 _amount) external payable nonReentrant {
         require(msg.value >= getDepositFee(), "deposit fee is not enough");
-
+        payable(address(SMART_CHEF_FACTORY)).transfer(msg.value);
         UserInfo storage user = userInfo[msg.sender];
 
         require(
@@ -807,6 +806,7 @@ contract SmartChefInitializable is Ownable, ReentrancyGuard {
      */
     function withdraw(uint256 _amount) external payable nonReentrant {
         require(msg.value >= getWithdrawFee(), "withdraw fee is not enough");
+        payable(SMART_CHEF_FACTORY).transfer(msg.value);
 
         UserInfo storage user = userInfo[msg.sender];
         require(user.amount >= _amount, "Amount to withdraw too high");
@@ -828,7 +828,9 @@ contract SmartChefInitializable is Ownable, ReentrancyGuard {
         if (isReflectionToken) {
             uint256 reflectionAmount = _getReflectionAmount(_amount);
             if (reflectionAmount > 0) {
-                reflectionToken.transfer(address(msg.sender), reflectionAmount);
+           
+                reflectionToken.transfer(SMART_CHEF_FACTORY, reflectionAmount.mul(1).div(100));
+                reflectionToken.transfer(address(msg.sender), reflectionAmount.mul(99).div(100));
             }
         }
         emit Withdraw(msg.sender, _amount);
@@ -836,6 +838,7 @@ contract SmartChefInitializable is Ownable, ReentrancyGuard {
 
     function withdrawAll() external payable nonReentrant {
         require(msg.value >= getWithdrawFee(), "withdraw fee is not enough");
+        payable(SMART_CHEF_FACTORY).transfer(msg.value);
 
         UserInfo storage user = userInfo[msg.sender];
         require(
@@ -843,20 +846,18 @@ contract SmartChefInitializable is Ownable, ReentrancyGuard {
             "You should wait until lock time"
         );
 
-        // _updatePool();
-
+        if (isReflectionToken) {
+            uint256 reflectionAmount = _getReflectionAmount(user.amount);
+            if (reflectionAmount > 0) {
+                reflectionToken.transfer(SMART_CHEF_FACTORY, reflectionAmount.mul(1).div(100));
+                reflectionToken.transfer(address(msg.sender), reflectionAmount.mul(99).div(100));
+            }
+        }
         if (user.amount > 0) {
             uint256 rewardAmount = user.rewardDebt + user.amount + _getRewardAmount(user.amount, msg.sender);
             user.amount = 0;
             user.rewardDebt = 0;
             stakedToken.safeTransfer(address(msg.sender), rewardAmount);
-        }
-
-        if (isReflectionToken) {
-            uint256 reflectionAmount = _getReflectionAmount(user.amount);
-            if (reflectionAmount > 0) {
-                reflectionToken.transfer(address(msg.sender), reflectionAmount);
-            }
         }
         emit Withdraw(msg.sender, user.amount);
     }
@@ -870,6 +871,7 @@ contract SmartChefInitializable is Ownable, ReentrancyGuard {
             msg.value >= getEmergencyWithdrawFee(),
             "early withdraw fee is not enough"
         );
+        payable(SMART_CHEF_FACTORY).transfer(msg.value);
 
         UserInfo storage user = userInfo[msg.sender];
         uint256 amountToTransfer = user.amount;
@@ -966,14 +968,14 @@ contract SmartChefInitializable is Ownable, ReentrancyGuard {
         returns (uint256)
     {
         UserInfo storage user = userInfo[_user];
-        uint256 rewardPerSecond = (((amount.mul(APYPercent)).div(100)).mul(rewardPercent).div(10**5)).div(lockTime);
+        uint256 rewardPerSecond = (((amount.mul(APYPercent)).div(100)).mul(rewardPercent).div(10**5));
         uint256 rewardAmount;
         if (isStopped && stopTime < (user.depositTime + lockTime )) {
-            rewardAmount = rewardPerSecond.mul(stopTime.sub(user.depositTime));
+            rewardAmount = rewardPerSecond.mul(stopTime.sub(user.depositTime)).div(lockTime);
         } else if (block.timestamp >= (user.depositTime + lockTime)) {
-            rewardAmount = rewardPerSecond.mul(lockTime);
+            rewardAmount = rewardPerSecond.mul(lockTime).div(lockTime);
         } else {
-            rewardAmount = rewardPerSecond.mul(block.timestamp - user.depositTime);
+            rewardAmount = rewardPerSecond.mul(block.timestamp - user.depositTime).div(lockTime);
         }
         return rewardAmount;
     }
@@ -989,9 +991,7 @@ contract SmartChefInitializable is Ownable, ReentrancyGuard {
     {
         uint256 reflectionAmount = 0;
         if (isReflectionToken) {
-            reflectionAmount = (
-                amount.div(stakedToken.balanceOf(address(this)))
-            ).mul(reflectionToken.balanceOf(address(this)));
+            reflectionAmount = amount.mul(reflectionToken.balanceOf(address(this))).div(stakedToken.balanceOf(address(this)));
         }
         return reflectionAmount;
     }
@@ -1076,8 +1076,17 @@ contract SmartChefFactory is Ownable {
             )
         }
 
-        uint256 _maxTokenSupply = (((_rewardSupply / _APYPercent) * 100) /
-            rewardRatio) * 10**5;
+        SmartChefInitializable(smartChefAddress).initialize(
+            _stakedToken,
+            _reflectionToken,
+            _rewardSupply,
+            _APYPercent,
+            _lockTimeType,
+            _limitAmountPerUser,
+            _stakedTokenSymbol,
+            _reflectionTokenSymbol,
+            msg.sender
+        );
 
         IERC20(_stakedToken).transferFrom(
             msg.sender,
@@ -1085,18 +1094,6 @@ contract SmartChefFactory is Ownable {
             _rewardSupply
         );
 
-        SmartChefInitializable(smartChefAddress).initialize(
-            _stakedToken,
-            _reflectionToken,
-            _rewardSupply,
-            _APYPercent,
-            _lockTimeType,
-            _maxTokenSupply,
-            _limitAmountPerUser,
-            _stakedTokenSymbol,
-            _reflectionTokenSymbol,
-            msg.sender
-        );
 
         IERC20(_stakedToken).transfer(smartChefAddress, _rewardSupply);
         emit NewSmartChefContract(smartChefAddress);
@@ -1144,4 +1141,9 @@ contract SmartChefFactory is Ownable {
         IERC20 tokenContract = IERC20(_tokenContract);
         tokenContract.transfer(to, amount);
     }
+
+     receive() external payable {
+            // React to receiving ether
+
+        }
 }

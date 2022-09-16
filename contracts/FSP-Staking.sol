@@ -622,6 +622,12 @@ contract FSPPool is Ownable, ReentrancyGuard {
     // lock time of pool
     uint256 public lockTime;
 
+    // Pool Create Time
+    uint256 public poolStartTime;
+
+    // Pool End Time
+    uint256 public poolEndTime;
+
     // maximum number tokens that can be staked in the pool
     uint256 public maxTokenSupply;
 
@@ -698,6 +704,11 @@ contract FSPPool is Ownable, ReentrancyGuard {
         SMART_CHEF_FACTORY = msg.sender;
     }
 
+    modifier isPoolActive() {
+        require(poolEndTime > block.timestamp, "pool is ended");
+        _;
+    }
+
     // /*
     //  * @notice Initialize the contract
     //  * @param _stakedToken: staked token address
@@ -743,11 +754,15 @@ contract FSPPool is Ownable, ReentrancyGuard {
             limitAmountPerUser = _limitAmountPerUser;
         }
         
+
         lockTime = _lockTimeType == 0 ? 365 days : _lockTimeType == 1
             ? 180 days
             : _lockTimeType == 2
             ? 90 days
             : 30 days;
+
+        poolStartTime = block.timestamp;
+        poolEndTime = poolStartTime + lockTime;
 
         rewardPercent = _lockTimeType == 0 ? 100000 : _lockTimeType == 1
             ? 49310
@@ -770,21 +785,20 @@ contract FSPPool is Ownable, ReentrancyGuard {
      * @notice Deposit staked tokens and collect reward tokens (if any)
      * @param _amount: amount to deposit
      */
-    function deposit(uint256 _amount) external payable nonReentrant {
+    function deposit(uint256 _amount) external payable nonReentrant isPoolActive {
         require(msg.value >= getDepositFee(), "deposit fee is not enough");
         payable(address(SMART_CHEF_FACTORY)).transfer(msg.value);
-        UserInfo storage user = userInfo[msg.sender];
 
+        UserInfo storage user = userInfo[msg.sender];
         require(
             !userLimit || ((_amount + user.amount) <= limitAmountPerUser),
             "Deposit: Amount above limit"
         );
 
         stakedUserList.push(msg.sender);
-        // _updatePool();
 
         if(user.amount > 0) {
-            uint256 reward = _getRewardAmount(user.amount, msg.sender);
+            uint256 reward = _getRewardAmount(msg.sender);
             user.rewardDebt += reward;
         }
 
@@ -800,51 +814,13 @@ contract FSPPool is Ownable, ReentrancyGuard {
         emit Deposit(msg.sender, _amount);
     }
 
-    /*
-     * @notice Withdraw staked tokens and collect reward tokens
-     * @param _amount: amount to withdraw (in rewardToken)
-     */
-    function withdraw(uint256 _amount) external payable nonReentrant {
-        require(msg.value >= getWithdrawFee(), "withdraw fee is not enough");
-        payable(SMART_CHEF_FACTORY).transfer(msg.value);
-
-        UserInfo storage user = userInfo[msg.sender];
-        require(user.amount >= _amount, "Amount to withdraw too high");
-        require(
-            isStopped || user.depositTime + lockTime <= block.timestamp,
-            "You should wait until lock time"
-        );
-
-        // _updatePool();
-
-        if (_amount > 0) {
-            uint256 rewardAmount = _amount.add(
-                _getRewardAmount(_amount, msg.sender)
-            );
-            user.amount = user.amount - _amount;
-            stakedToken.safeTransfer(address(msg.sender), rewardAmount);
-        }
-
-        if (isReflectionToken) {
-            uint256 reflectionAmount = _getReflectionAmount(_amount);
-            if (reflectionAmount > 0) {
-           
-                reflectionToken.transfer(SMART_CHEF_FACTORY, reflectionAmount.mul(1).div(100));
-                reflectionToken.transfer(address(msg.sender), reflectionAmount.mul(99).div(100));
-            }
-        }
-        emit Withdraw(msg.sender, _amount);
-    }
-
     function withdrawAll() external payable nonReentrant {
         require(msg.value >= getWithdrawFee(), "withdraw fee is not enough");
         payable(SMART_CHEF_FACTORY).transfer(msg.value);
 
         UserInfo storage user = userInfo[msg.sender];
-        require(
-            isStopped || user.depositTime + lockTime <= block.timestamp,
-            "You should wait until lock time"
-        );
+
+        require(isStopped || poolEndTime < block.timestamp, "You should wait until lock time");
 
         if (isReflectionToken) {
             uint256 reflectionAmount = _getReflectionAmount(user.amount);
@@ -854,7 +830,7 @@ contract FSPPool is Ownable, ReentrancyGuard {
             }
         }
         if (user.amount > 0) {
-            uint256 rewardAmount = user.rewardDebt + user.amount + _getRewardAmount(user.amount, msg.sender);
+            uint256 rewardAmount = user.rewardDebt + user.amount + _getRewardAmount(msg.sender);
             user.amount = 0;
             user.rewardDebt = 0;
             stakedToken.safeTransfer(address(msg.sender), rewardAmount);
@@ -941,20 +917,13 @@ contract FSPPool is Ownable, ReentrancyGuard {
     }
 
     /*
-     * @notice Update reward variables of the given pool to be up-to-date.
-     */
-    function _updatePool() internal {
-      // TODO
-    }
-
-    /*
      * @notice View function to see pending reward on frontend.
      * @param _user: user address
      * @return Pending reward for a given user
      */
     function pendingReward(address _user) external view returns (uint256) {
         UserInfo storage user = userInfo[_user];
-        uint256 rewardAmount = user.rewardDebt + _getRewardAmount(user.amount, _user);
+        uint256 rewardAmount = user.rewardDebt + _getRewardAmount(_user);
         return rewardAmount;
     }
 
@@ -962,18 +931,18 @@ contract FSPPool is Ownable, ReentrancyGuard {
      * @notice Return reward amount of user.
      * @param _user: user address to calculate reward amount
      */
-    function _getRewardAmount(uint256 amount, address _user)
+    function _getRewardAmount(address _user)
         internal
         view
         returns (uint256)
     {
         UserInfo storage user = userInfo[_user];
-        uint256 rewardPerSecond = (((amount.mul(APYPercent)).div(100)).mul(rewardPercent).div(10**5));
+        uint256 rewardPerSecond = (((user.amount.mul(APYPercent)).div(100)).mul(rewardPercent).div(10**5));
         uint256 rewardAmount;
-        if (isStopped && stopTime < (user.depositTime + lockTime )) {
+        if (isStopped && stopTime < poolEndTime ) {
             rewardAmount = rewardPerSecond.mul(stopTime.sub(user.depositTime)).div(lockTime);
-        } else if (block.timestamp >= (user.depositTime + lockTime)) {
-            rewardAmount = rewardPerSecond.mul(lockTime).div(lockTime);
+        } else if (block.timestamp >= poolEndTime) {
+            rewardAmount = rewardPerSecond.mul(poolEndTime.sub(user.depositTime)).div(lockTime);
         } else {
             rewardAmount = rewardPerSecond.mul(block.timestamp - user.depositTime).div(lockTime);
         }
@@ -1006,6 +975,14 @@ contract FSPPool is Ownable, ReentrancyGuard {
 
         return true;
     }
+
+    /**
+     * @notice Return the Pool Remaining Time.
+     */
+    function getPoolLifeTime() external view returns(uint256) {
+        return (poolEndTime - block.timestamp);
+    }
+
 
 }
 

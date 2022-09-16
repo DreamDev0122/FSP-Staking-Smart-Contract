@@ -604,9 +604,9 @@ interface IPancakeProfile {
         );
 }
 
-// File: contracts/SmartChefInitializable.sol
+// File: contracts/FSPPool.sol
 
-contract SmartChefInitializable is Ownable, ReentrancyGuard {
+contract FSPPool is Ownable, ReentrancyGuard {
     using SafeERC20 for IERC20Metadata;
     using SafeMath for uint256;
 
@@ -1009,17 +1009,19 @@ contract SmartChefInitializable is Ownable, ReentrancyGuard {
 
 }
 
-// File: contracts/SmartChefFactory.sol
+// File: contracts/FSPFactory.sol
 
-contract SmartChefFactory is Ownable {
-    mapping(address => address[]) public pools;
-    uint256 public poolCreateFee = 2 ether;
+contract FSPFactory is Ownable {
+    mapping(address => address[]) public pools; // pool addresses created by pool owner
+    uint256 public poolCreateFee = .01 ether;
     uint256 public rewardRatio1 = 100000; // 1 year Pool
     uint256 public rewardRatio2 = 49310; // 180 days Pool
     uint256 public rewardRatio3 = 24650; // 90 days Pool 
     uint256 public rewardRatio4 = 8291; // 30 days Pool
+    address[] public allPools; // all created pool addresses
+    
 
-    event NewSmartChefContract(address indexed smartChef);
+    event NewFSPPool(address indexed smartChef);
 
     constructor() {
         //
@@ -1052,19 +1054,21 @@ contract SmartChefFactory is Ownable {
         require(customPoolCreateFee <= msg.value, "Pool Price is not correct.");
         
         require(_stakedToken.totalSupply() >= 0);
-        require(_reflectionToken.totalSupply() >= 0);
-
+        if(address(_reflectionToken) != address(0)){
+            require(_reflectionToken.totalSupply() >= 0);
+        }
         require(
             _stakedToken != _reflectionToken,
             "Tokens must be be different"
         );
 
-        bytes memory bytecode = type(SmartChefInitializable).creationCode;
+        bytes memory bytecode = type(FSPPool).creationCode;
         // pass constructor argument
 
         bytes32 salt = keccak256(
-            abi.encodePacked(_stakedToken, _reflectionToken)
+            abi.encodePacked(_stakedToken, _reflectionToken, block.timestamp)
         );
+
         address smartChefAddress;
 
         assembly {
@@ -1076,7 +1080,7 @@ contract SmartChefFactory is Ownable {
             )
         }
 
-        SmartChefInitializable(smartChefAddress).initialize(
+        FSPPool(smartChefAddress).initialize(
             _stakedToken,
             _reflectionToken,
             _rewardSupply,
@@ -1092,11 +1096,14 @@ contract SmartChefFactory is Ownable {
             msg.sender,
             address(this),
             _rewardSupply
-        );
-
+        ); 
 
         IERC20(_stakedToken).transfer(smartChefAddress, _rewardSupply);
-        emit NewSmartChefContract(smartChefAddress);
+
+        allPools.push(smartChefAddress);
+        pools[msg.sender].push(smartChefAddress);
+
+        emit NewFSPPool(smartChefAddress);
     }
 
     function updatePoolCreateFee(uint256 _poolCreateFee) external onlyOwner {
@@ -1142,8 +1149,23 @@ contract SmartChefFactory is Ownable {
         tokenContract.transfer(to, amount);
     }
 
-     receive() external payable {
-            // React to receiving ether
+    function getCreationFee(uint256 _lockTimeType) public view returns(uint256){
+        uint256 rewardRatio = _lockTimeType == 0
+        ? rewardRatio1
+        : _lockTimeType == 1
+        ? rewardRatio2
+        : _lockTimeType == 2
+        ? rewardRatio3
+        : rewardRatio4;
 
-        }
+        return rewardRatio * poolCreateFee;
+    }
+
+    function getAllPools() public view returns (address[] memory){
+        return allPools;
+    }
+
+     receive() external payable {
+        // React to receiving ether
+    }
 }

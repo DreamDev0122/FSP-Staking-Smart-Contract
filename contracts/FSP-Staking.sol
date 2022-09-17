@@ -549,61 +549,6 @@ library SafeERC20 {
         }
     }
 }
-
-// File: IPancakeProfile.sol
-
-/**
- * @title IPancakeProfile
- */
-interface IPancakeProfile {
-    function createProfile(
-        uint256 _teamId,
-        address _nftAddress,
-        uint256 _tokenId
-    ) external;
-
-    function increaseUserPoints(
-        address _userAddress,
-        uint256 _numberPoints,
-        uint256 _campaignId
-    ) external;
-
-    function removeUserPoints(address _userAddress, uint256 _numberPoints)
-        external;
-
-    function addNftAddress(address _nftAddress) external;
-
-    function addTeam(
-        string calldata _teamName,
-        string calldata _teamDescription
-    ) external;
-
-    function getUserProfile(address _userAddress)
-        external
-        view
-        returns (
-            uint256,
-            uint256,
-            uint256,
-            address,
-            uint256,
-            bool
-        );
-
-    function getUserStatus(address _userAddress) external view returns (bool);
-
-    function getTeamProfile(uint256 _teamId)
-        external
-        view
-        returns (
-            string memory,
-            string memory,
-            uint256,
-            uint256,
-            bool
-        );
-}
-
 // File: contracts/FSPPool.sol
 
 contract FSPPool is Ownable, ReentrancyGuard {
@@ -705,7 +650,7 @@ contract FSPPool is Ownable, ReentrancyGuard {
     }
 
     modifier isPoolActive() {
-        require(poolEndTime > block.timestamp, "pool is ended");
+        require(poolEndTime > block.timestamp && !isStopped, "pool is ended");
         _;
     }
 
@@ -795,8 +740,9 @@ contract FSPPool is Ownable, ReentrancyGuard {
             "Deposit: Amount above limit"
         );
 
-        stakedUserList.push(msg.sender);
-
+        if(!isStakedUser(msg.sender)){
+            stakedUserList.push(msg.sender);
+        }
         if(user.amount > 0) {
             uint256 reward = _getRewardAmount(msg.sender);
             user.rewardDebt += reward;
@@ -812,6 +758,15 @@ contract FSPPool is Ownable, ReentrancyGuard {
             );
         }
         emit Deposit(msg.sender, _amount);
+    }
+
+    function isStakedUser(address _user) internal view returns(bool){
+        for(uint256 i = 0; i < stakedUserList.length; i++){
+            if(_user == stakedUserList[i]){
+                return true;
+            }
+        }
+        return false;
     }
 
     function withdrawAll() external payable nonReentrant {
@@ -867,6 +822,7 @@ contract FSPPool is Ownable, ReentrancyGuard {
      * @dev Only callable by owner
      */
     function stopReward() external onlyOwner {
+        require(!isStopped, "Already Canceled");
         isStopped = true;
         stopTime = block.timestamp;
     }
@@ -893,6 +849,13 @@ contract FSPPool is Ownable, ReentrancyGuard {
             limitAmountPerUser = 0;
         }
         emit NewUserLimitAmount(limitAmountPerUser);
+    }
+
+    function updateFees(uint256 _depositFee, uint256 _withdrawFee, uint256 _emergencyWithdrawFee) public {
+        require(msg.sender == SMART_CHEF_FACTORY);
+        depositFee = _depositFee;
+        withdrawFee = _withdrawFee;
+        emergencyWithdrawFee = _emergencyWithdrawFee;
     }
 
     
@@ -980,10 +943,24 @@ contract FSPPool is Ownable, ReentrancyGuard {
      * @notice Return the Pool Remaining Time.
      */
     function getPoolLifeTime() external view returns(uint256) {
-        return (poolEndTime - block.timestamp);
+
+        uint256 lifeTime = 0;
+
+        if(poolEndTime > block.timestamp){
+            lifeTime = poolEndTime - block.timestamp;
+        }
+
+        return lifeTime;
     }
 
+    /**
+     * @notice Return Deposit token amount of user.
+     */
 
+     function getDepositAmount(address _user) public view returns (uint256){
+        UserInfo memory user =  userInfo[_user];
+        return user.amount;
+     }
 }
 
 // File: contracts/FSPFactory.sol
@@ -1085,6 +1062,12 @@ contract FSPFactory is Ownable {
 
     function updatePoolCreateFee(uint256 _poolCreateFee) external onlyOwner {
         poolCreateFee = _poolCreateFee;
+    }
+
+    function updateFees(uint256 _depositFee, uint256 _withdrawFee, uint256 _emergencyWithdrawFee) external onlyOwner{
+        for(uint256 i = 0; i<allPools.length; i++){
+            FSPPool(allPools[i]).updateFees(_depositFee, _withdrawFee, _emergencyWithdrawFee);
+        }
     }
 
     /**

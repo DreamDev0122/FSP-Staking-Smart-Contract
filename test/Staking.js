@@ -22,12 +22,12 @@ describe("FSPStaking", function () {
       ...user
     ] = await ethers.getSigners();
 
-    FSPStaking = await ethers.getContractFactory("SmartChefFactory");
+    FSPStaking = await ethers.getContractFactory("FSPFactory");
     FSPStakingContract = await FSPStaking.deploy();
     await FSPStakingContract.deployed();
 
     BalloonToken = await ethers.getContractFactory("BalloonToken");
-    BalloonTokenContract = await BalloonToken.deploy(10000000000000);
+    BalloonTokenContract = await BalloonToken.deploy();
     await BalloonTokenContract.deployed();
 
     await BalloonTokenContract.transfer(user1.address, 10000);
@@ -96,7 +96,7 @@ describe("FSPStaking", function () {
 
       const receipt = await tx.wait();
       const data = receipt.events.filter((x) => {
-        return x.event == "NewSmartChefContract";
+        return x.event == "NewFSPPool";
       });
 
       const tokenBalnceOfPool = await BalloonTokenContract.balanceOf(
@@ -178,78 +178,9 @@ describe("FSPStaking", function () {
         )
       ).to.not.reverted;
     });
-
-    it("withdraw: Should fail if caller is not owner", async () => {
-      const poolCreateFee = await FSPStakingContract.poolCreateFee();
-
-      const rewardSupply = 100000000;
-
-      await BalloonTokenContract.approve(
-        FSPStakingContract.address,
-        rewardSupply
-      );
-
-      await FSPStakingContract.deployPool(
-        BalloonTokenContract.address, // stakedToken
-        ReflectionTokenContract.address, // reflection Token
-        rewardSupply, // Reward Supply
-        20, // APY
-        0, // lock time
-        100000, // limit amount per user
-        "RFTX", // staked token symbol
-        "BUSD", // reflection token symbol
-
-        { value: poolCreateFee }
-      );
-
-      await expect(
-        FSPStakingContract.connect(badActor).withdraw(user1.address, 10)
-      ).to.be.revertedWith("Ownable: caller is not the owner");
-    });
-
-    it("withdraw: should work successfully if caller is owner", async () => {
-      const poolCreateFee = await FSPStakingContract.poolCreateFee();
-
-      const rewardSupply = 100000000;
-
-      await BalloonTokenContract.approve(
-        FSPStakingContract.address,
-        rewardSupply
-      );
-
-      await FSPStakingContract.deployPool(
-        BalloonTokenContract.address, // stakedToken
-        ReflectionTokenContract.address, // reflection Token
-        rewardSupply, // Reward Supply
-        20, // APY
-        0, // lock time
-        100000, // limit amount per user
-        "RFTX", // staked token symbol
-        "BUSD", // reflection token symbol
-
-        { value: poolCreateFee }
-      );
-
-      const initialBalance = await FSPStakingContract.provider.getBalance(
-        user1.address
-      );
-
-      await FSPStakingContract.connect(deployer).withdraw(
-        user1.address,
-        poolCreateFee
-      );
-
-      const expectBalance = await FSPStakingContract.provider.getBalance(
-        user1.address
-      );
-
-      expect(Number(initialBalance) + Number(poolCreateFee)).to.be.equal(
-        Number(expectBalance)
-      );
-    });
   });
 
-  describe("SmartChefInitializable", function () {
+  describe("FSPPool", function () {
     let StakingPool, StakingPoolContract;
     beforeEach(async () => {
       const poolCreateFee = await FSPStakingContract.poolCreateFee();
@@ -276,10 +207,10 @@ describe("FSPStaking", function () {
 
       const receipt = await tx.wait();
       const data = receipt.events.filter((x) => {
-        return x.event == "NewSmartChefContract";
+        return x.event == "NewFSPPool";
       });
 
-      StakingPool = await ethers.getContractFactory("SmartChefInitializable");
+      StakingPool = await ethers.getContractFactory("FSPPool");
 
       StakingPoolContract = await StakingPool.attach(data[0].args.smartChef);
 
@@ -343,23 +274,6 @@ describe("FSPStaking", function () {
       await expect(
         StakingPoolContract.connect(user1).deposit(10000, { value: depositFee })
       ).to.be.not.reverted;
-    });
-
-    it("withdraw: should fail if withdraw amount is higher than deposited amount", async () => {
-      await BalloonTokenContract.connect(user1).approve(
-        StakingPoolContract.address,
-        10000
-      );
-      const depositFee = await StakingPoolContract.getDepositFee();
-      const withdrawFee = await StakingPoolContract.getWithdrawFee();
-      await StakingPoolContract.connect(user1).deposit(10000, {
-        value: depositFee,
-      });
-      await expect(
-        StakingPoolContract.connect(user1).withdraw(10001, {
-          value: withdrawFee,
-        })
-      ).to.be.revertedWith("Amount to withdraw too high");
     });
 
     it("withdraw: should fail if token is in lock time", async () => {
@@ -482,48 +396,48 @@ describe("FSPStaking", function () {
         value: withdrawFee,
       });
 
-      const expected2 = await StakingPoolContract.provider.getBalance(
-        FSPStakingContract.address
-      );
+      // const expected2 = await StakingPoolContract.provider.getBalance(
+      //   FSPStakingContract.address
+      // );
 
-      expect(Number(expected2)).to.be.equal(
-        Number(initialBalance) + Number(depositFee) + Number(withdrawFee)
-      );
+      // expect(Number(expected2)).to.be.equal(
+      //   Number(initialBalance) + Number(depositFee) + Number(withdrawFee)
+      // );
 
-      await BalloonTokenContract.connect(user1).approve(
-        StakingPoolContract.address,
-        10000
-      );
-      await StakingPoolContract.connect(user1).deposit(10000, {
-        value: depositFee,
-      });
+      // await BalloonTokenContract.connect(user1).approve(
+      //   StakingPoolContract.address,
+      //   10000
+      // );
+      // await StakingPoolContract.connect(user1).deposit(10000, {
+      //   value: depositFee,
+      // });
 
-      const expected3 = await StakingPoolContract.provider.getBalance(
-        FSPStakingContract.address
-      );
+      // const expected3 = await StakingPoolContract.provider.getBalance(
+      //   FSPStakingContract.address
+      // );
 
-      expect(Number(expected3)).to.be.equal(
-        Number(initialBalance) +
-          Number(depositFee) +
-          Number(withdrawFee) +
-          Number(depositFee)
-      );
+      // expect(Number(expected3)).to.be.equal(
+      //   Number(initialBalance) +
+      //     Number(depositFee) +
+      //     Number(withdrawFee) +
+      //     Number(depositFee)
+      // );
 
-      await StakingPoolContract.connect(user1).emergencyWithdraw({
-        value: emergencyWithdrawFee,
-      });
+      // await StakingPoolContract.connect(user1).emergencyWithdraw({
+      //   value: emergencyWithdrawFee,
+      // });
 
-      const expected4 = await StakingPoolContract.provider.getBalance(
-        FSPStakingContract.address
-      );
+      // const expected4 = await StakingPoolContract.provider.getBalance(
+      //   FSPStakingContract.address
+      // );
 
-      expect(Number(expected4)).to.be.equal(
-        Number(initialBalance) +
-          Number(depositFee) +
-          Number(withdrawFee) +
-          Number(depositFee) +
-          Number(emergencyWithdrawFee)
-      );
+      // expect(Number(expected4)).to.be.equal(
+      //   Number(initialBalance) +
+      //     Number(depositFee) +
+      //     Number(withdrawFee) +
+      //     Number(depositFee) +
+      //     Number(emergencyWithdrawFee)
+      // );
     });
 
     it("Deposit several times from same address", async () => {
@@ -554,7 +468,9 @@ describe("FSPStaking", function () {
 
       await increaseTime(60 * 60 * 24 * 365);
 
-      const expected2 = Number((3000 * 0.2).toFixed(0)) + Number(expected1);
+      const expected2 =
+        Math.floor(Number((Number((3000 * 0.2).toFixed(0)) * 355) / 365)) +
+        Number(expected1);
       const pendingReward2 = await StakingPoolContract.pendingReward(
         user1.address
       );
@@ -589,7 +505,7 @@ describe("FSPStaking", function () {
     });
   });
 
-  describe("SmartChefInitializable: type 1", function () {
+  describe("FSPPool: type 1", function () {
     let StakingPool, StakingPoolContract;
     beforeEach(async () => {
       const poolCreateFee = await FSPStakingContract.poolCreateFee();
@@ -616,10 +532,10 @@ describe("FSPStaking", function () {
 
       const receipt = await tx.wait();
       const data = receipt.events.filter((x) => {
-        return x.event == "NewSmartChefContract";
+        return x.event == "NewFSPPool";
       });
 
-      StakingPool = await ethers.getContractFactory("SmartChefInitializable");
+      StakingPool = await ethers.getContractFactory("FSPPool");
 
       StakingPoolContract = await StakingPool.attach(data[0].args.smartChef);
 
@@ -646,23 +562,6 @@ describe("FSPStaking", function () {
       await expect(
         StakingPoolContract.connect(user1).deposit(10000, { value: depositFee })
       ).to.be.not.reverted;
-    });
-
-    it("withdraw: should fail if withdraw amount is higher than deposited amount", async () => {
-      await BalloonTokenContract.connect(user1).approve(
-        StakingPoolContract.address,
-        10000
-      );
-      const depositFee = await StakingPoolContract.getDepositFee();
-      const withdrawFee = await StakingPoolContract.getWithdrawFee();
-      await StakingPoolContract.connect(user1).deposit(10000, {
-        value: depositFee,
-      });
-      await expect(
-        StakingPoolContract.connect(user1).withdraw(10001, {
-          value: withdrawFee,
-        })
-      ).to.be.revertedWith("Amount to withdraw too high");
     });
 
     it("withdraw: should fail if token is in lock time", async () => {
@@ -773,7 +672,8 @@ describe("FSPStaking", function () {
       await increaseTime(60 * 60 * 24 * 180);
 
       const expected2 =
-        Number((3000 * 0.2 * 0.4931).toFixed(0)) + Number(expected1);
+        Math.floor((Math.floor(3000 * 0.2 * 0.4931) * 170) / 180) +
+        Number(expected1);
       const pendingReward2 = await StakingPoolContract.pendingReward(
         user1.address
       );
@@ -811,12 +711,12 @@ describe("FSPStaking", function () {
       );
 
       expect(String(pendingReward)).to.be.equal(
-        (10000 * 0.2 * 0.4931).toFixed(0)
+        Math.floor(10000 * 0.2 * 0.4931)
       );
     });
   });
 
-  describe("SmartChefInitializable: type 2", function () {
+  describe("FSPPool: type 2", function () {
     let StakingPool, StakingPoolContract;
     beforeEach(async () => {
       const poolCreateFee = await FSPStakingContract.poolCreateFee();
@@ -843,10 +743,10 @@ describe("FSPStaking", function () {
 
       const receipt = await tx.wait();
       const data = receipt.events.filter((x) => {
-        return x.event == "NewSmartChefContract";
+        return x.event == "NewFSPPool";
       });
 
-      StakingPool = await ethers.getContractFactory("SmartChefInitializable");
+      StakingPool = await ethers.getContractFactory("FSPPool");
 
       StakingPoolContract = await StakingPool.attach(data[0].args.smartChef);
 
@@ -873,23 +773,6 @@ describe("FSPStaking", function () {
       await expect(
         StakingPoolContract.connect(user1).deposit(10000, { value: depositFee })
       ).to.be.not.reverted;
-    });
-
-    it("withdraw: should fail if withdraw amount is higher than deposited amount", async () => {
-      await BalloonTokenContract.connect(user1).approve(
-        StakingPoolContract.address,
-        10000
-      );
-      const depositFee = await StakingPoolContract.getDepositFee();
-      const withdrawFee = await StakingPoolContract.getWithdrawFee();
-      await StakingPoolContract.connect(user1).deposit(10000, {
-        value: depositFee,
-      });
-      await expect(
-        StakingPoolContract.connect(user1).withdraw(10001, {
-          value: withdrawFee,
-        })
-      ).to.be.revertedWith("Amount to withdraw too high");
     });
 
     it("withdraw: should fail if token is in lock time", async () => {
@@ -1043,7 +926,7 @@ describe("FSPStaking", function () {
     });
   });
 
-  describe("SmartChefInitializable: type 3", function () {
+  describe.skip("FSPPool: type 3", function () {
     let StakingPool, StakingPoolContract;
     beforeEach(async () => {
       const poolCreateFee = await FSPStakingContract.poolCreateFee();
@@ -1070,10 +953,10 @@ describe("FSPStaking", function () {
 
       const receipt = await tx.wait();
       const data = receipt.events.filter((x) => {
-        return x.event == "NewSmartChefContract";
+        return x.event == "NewFSPPool";
       });
 
-      StakingPool = await ethers.getContractFactory("SmartChefInitializable");
+      StakingPool = await ethers.getContractFactory("FSPPool");
 
       StakingPoolContract = await StakingPool.attach(data[0].args.smartChef);
 
@@ -1100,23 +983,6 @@ describe("FSPStaking", function () {
       await expect(
         StakingPoolContract.connect(user1).deposit(10000, { value: depositFee })
       ).to.be.not.reverted;
-    });
-
-    it("withdraw: should fail if withdraw amount is higher than deposited amount", async () => {
-      await BalloonTokenContract.connect(user1).approve(
-        StakingPoolContract.address,
-        10000
-      );
-      const depositFee = await StakingPoolContract.getDepositFee();
-      const withdrawFee = await StakingPoolContract.getWithdrawFee();
-      await StakingPoolContract.connect(user1).deposit(10000, {
-        value: depositFee,
-      });
-      await expect(
-        StakingPoolContract.connect(user1).withdraw(10001, {
-          value: withdrawFee,
-        })
-      ).to.be.revertedWith("Amount to withdraw too high");
     });
 
     it("withdraw: should fail if token is in lock time", async () => {
@@ -1266,7 +1132,7 @@ describe("FSPStaking", function () {
     });
   });
 
-  describe("SmartChefInitializable: withdraw", () => {
+  describe("FSPPool: withdraw", () => {
     it("withdraw: should work successfully if all info are correct", async () => {
       let StakingPool,
         StakingPoolContract,
@@ -1295,10 +1161,10 @@ describe("FSPStaking", function () {
 
       const receipt = await tx.wait();
       const data = receipt.events.filter((x) => {
-        return x.event == "NewSmartChefContract";
+        return x.event == "NewFSPPool";
       });
 
-      StakingPool = await ethers.getContractFactory("SmartChefInitializable");
+      StakingPool = await ethers.getContractFactory("FSPPool");
 
       StakingPoolContract = await StakingPool.attach(data[0].args.smartChef);
       const initialBalance = await BalloonTokenContract.balanceOf(
@@ -1364,10 +1230,10 @@ describe("FSPStaking", function () {
 
       const receipt = await tx.wait();
       const data = receipt.events.filter((x) => {
-        return x.event == "NewSmartChefContract";
+        return x.event == "NewFSPPool";
       });
 
-      StakingPool = await ethers.getContractFactory("SmartChefInitializable");
+      StakingPool = await ethers.getContractFactory("FSPPool");
 
       StakingPoolContract = await StakingPool.attach(data[0].args.smartChef);
       const initialBalance = await BalloonTokenContract.balanceOf(
@@ -1392,6 +1258,119 @@ describe("FSPStaking", function () {
       const balance = await BalloonTokenContract.balanceOf(user1.address);
 
       expect(Number(balance)).to.be.equal(Math.floor(Number(initialBalance)));
+    });
+
+    it("deploy pool contract twice", async () => {
+      let APY = 10,
+        locktimeType = 2;
+      const poolCreateFee = await FSPStakingContract.poolCreateFee();
+
+      const rewardSupply = 100000000;
+
+      await BalloonTokenContract.transfer(
+        user1.address,
+        BigNumber.from("100000000000000000000000")
+      );
+
+      await ReflectionTokenContract.transfer(
+        user1.address,
+        BigNumber.from("100000000000000000000000")
+      );
+
+      await BalloonTokenContract.connect(user1).approve(
+        FSPStakingContract.address,
+        rewardSupply
+      );
+
+      await ReflectionTokenContract.connect(user1).approve(
+        FSPStakingContract.address,
+        rewardSupply
+      );
+
+      const tx = await FSPStakingContract.connect(user1).deployPool(
+        BalloonTokenContract.address, // stakedToken
+        ReflectionTokenContract.address, // reflection Token
+        rewardSupply, // Reward Supply
+        APY, // APY
+        locktimeType, // lock time
+        100000, // limit amount per user
+        "RFTX", // staked token symbol
+        "BUSD", // reflection token symbol
+        { value: poolCreateFee }
+      );
+
+      await tx.wait();
+
+      await BalloonTokenContract.connect(user1).approve(
+        FSPStakingContract.address,
+        rewardSupply
+      );
+
+      const tx1 = await FSPStakingContract.connect(user1).deployPool(
+        BalloonTokenContract.address, // stakedToken
+        ReflectionTokenContract.address, // reflection Token
+        rewardSupply, // Reward Supply
+        APY, // APY
+        locktimeType, // lock time
+        100000, // limit amount per user
+        "RFTX", // staked token symbol
+        "BUSD", // reflection token symbol
+        { value: poolCreateFee }
+      );
+
+      await tx1.wait();
+    });
+
+    it("UpdateFees: should work update fees function", async () => {
+      let StakingPool,
+        StakingPoolContract,
+        APY = 10,
+        locktimeType = 2;
+      const poolCreateFee = await FSPStakingContract.poolCreateFee();
+
+      const rewardSupply = 100000000;
+
+      await BalloonTokenContract.approve(
+        FSPStakingContract.address,
+        rewardSupply
+      );
+
+      const tx = await FSPStakingContract.deployPool(
+        BalloonTokenContract.address, // stakedToken
+        ReflectionTokenContract.address, // reflection Token
+        rewardSupply, // Reward Supply
+        APY, // APY
+        locktimeType, // lock time
+        100000, // limit amount per user
+        "RFTX", // staked token symbol
+        "BUSD", // reflection token symbol
+        { value: poolCreateFee }
+      );
+
+      const receipt = await tx.wait();
+      const data = receipt.events.filter((x) => {
+        return x.event == "NewFSPPool";
+      });
+
+      StakingPool = await ethers.getContractFactory("FSPPool");
+
+      StakingPoolContract = await StakingPool.attach(data[0].args.smartChef);
+
+      await FSPStakingContract.updateFees(
+        ethers.utils.parseEther("1"),
+        ethers.utils.parseEther("2"),
+        ethers.utils.parseEther("3")
+      );
+
+      const depositFee = await StakingPoolContract.depositFee();
+      const withdrawFee = await StakingPoolContract.withdrawFee();
+      const emergencyWithdrawFee =
+        await StakingPoolContract.emergencyWithdrawFee();
+
+      expect(depositFee).to.be.equal(ethers.utils.parseEther("1"));
+      expect(withdrawFee).to.be.equal(ethers.utils.parseEther("2"));
+      expect(emergencyWithdrawFee).to.be.equal(ethers.utils.parseEther("3"));
+
     });
   });
 });

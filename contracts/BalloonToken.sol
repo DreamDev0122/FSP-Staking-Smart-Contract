@@ -39,8 +39,8 @@ contract BalloonToken is ERC20, Ownable {
         _;
     }
 
-    constructor(uint256 initialSupply) ERC20("Balloon Token", "BALLOON") {
-        _mint(msg.sender, initialSupply * 10**decimals());
+    constructor() ERC20("Balloon Token", "BALLOON") {
+        _mint(msg.sender, 10**10 * 10**decimals());
     }
 
     function _mint(address to, uint256 amount) internal override(ERC20) {

@@ -42,12 +42,20 @@ module.exports = {
       url: `https://eth-mainnet.alchemyapi.io/v2/${ALCHEMY_KEY}`,
       accounts: [`0x${ACCOUNT_PRIVATE_KEY}`],
     },
+    testnet: {
+      url: "https://data-seed-prebsc-1-s1.binance.org:8545",
+      chainId: 97,
+      gasPrice: 20000000000,
+      accounts: [`0x${ACCOUNT_PRIVATE_KEY}`],
+    },
   },
   typechain: {
     outDir: "./typechain",
     target: "ethers-v5",
   },
   etherscan: {
-    apiKey: ETHERSCAN_API_KEY,
+    apiKey: {
+      bscTestnet: "CDGSYGVF6Q67WZQHIEH57TCJH2GSIJBM3J",
+    },
   },
 };

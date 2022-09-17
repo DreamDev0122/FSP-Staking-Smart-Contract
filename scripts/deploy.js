@@ -6,21 +6,31 @@
 // global scope, and execute the script.
 const hre = require("hardhat");
 
+const { BigNumber } = require("ethers");
+
 async function main() {
-  const currentTimestampInSeconds = Math.round(Date.now() / 1000);
-  const ONE_YEAR_IN_SECS = 365 * 24 * 60 * 60;
-  const unlockTime = currentTimestampInSeconds + ONE_YEAR_IN_SECS;
+  const FSPStaking = await hre.ethers.getContractFactory("FSPFactory");
+  const FSPStakingContract = await FSPStaking.deploy();
 
-  const lockedAmount = hre.ethers.utils.parseEther("1");
+  await FSPStakingContract.deployed();
 
-  const Lock = await hre.ethers.getContractFactory("Lock");
-  const lock = await Lock.deploy(unlockTime, { value: lockedAmount });
+  console.log(`address: ${FSPStakingContract.address}`);
 
-  await lock.deployed();
+  const BalloonToken = await hre.ethers.getContractFactory("BalloonToken");
+  const BalloonTokenContract = await BalloonToken.deploy();
 
-  console.log(
-    `Lock with 1 ETH and unlock timestamp ${unlockTime} deployed to ${lock.address}`
+  await BalloonTokenContract.deployed();
+
+  console.log(`address: ${BalloonTokenContract.address}`);
+
+  const ReflectionToken = await hre.ethers.getContractFactory(
+    "ReflectionToken"
   );
+  const ReflectionTokenContract = await ReflectionToken.deploy(100000000000);
+
+  await ReflectionTokenContract.deployed();
+
+  console.log(`address: ${ReflectionTokenContract.address}`);
 }
 
 // We recommend this pattern to be able to use async/await everywhere

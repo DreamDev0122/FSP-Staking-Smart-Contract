@@ -603,24 +603,28 @@ contract FSPPool is Ownable, ReentrancyGuard {
     // Whether it is initialized
     bool public isInitialized;
 
-    // The block number of the last pool update
-    uint256 public lastRewardBlock;
-
     // Reward percent
     uint256 public rewardPercent;
 
+    // Whether it is stopped
     bool public isStopped;
 
+    // Pool Stop Time
     uint256 private stopTime;
 
+    // Fee to deposit
     uint256 public depositFee = 0.007 ether;
 
+    // Fee to withdraw
     uint256 public withdrawFee = 0.014 ether;
 
+    // Fee to emergency withdraw
     uint256 public emergencyWithdrawFee = 0.03 ether;
 
     // Info of each user that stakes tokens (stakedToken)
     mapping(address => UserInfo) public userInfo;
+
+    // Staked User list
     address[] public stakedUserList;
 
     struct UserInfo {
@@ -654,22 +658,22 @@ contract FSPPool is Ownable, ReentrancyGuard {
         _;
     }
 
-    // /*
-    //  * @notice Initialize the contract
-    //  * @param _stakedToken: staked token address
-    //  * @param _reflectionToken: _reflectionToken token address
-    //  * @param _rewardSupply: Reward Supply Amount
-    //  * @param _APYPercent: APY
-    //  * @param _lockTimeType: Lock Time Type 
-    //            0 - 1 year 
-    //            1- 180 days 
-    //            2- 90 days 
-    //            3 - 30 days
-    //  * @param _limitAmountPerUser: Pool limit per user in stakedToken
-    //  * @param _stakedTokenSymbol: staked token symbol
-    //  * @param _reflectionTokenSymbol: reflection token symbol
-    //  * @param _admin: admin address with ownership
-    //  */
+    /*
+     * @notice Initialize the contract
+     * @param _stakedToken: staked token address
+     * @param _reflectionToken: _reflectionToken token address
+     * @param _rewardSupply: Reward Supply Amount
+     * @param _APYPercent: APY
+     * @param _lockTimeType: Lock Time Type 
+               0 - 1 year 
+               1- 180 days 
+               2- 90 days 
+               3 - 30 days
+     * @param _limitAmountPerUser: Pool limit per user in stakedToken
+     * @param _stakedTokenSymbol: staked token symbol
+     * @param _reflectionTokenSymbol: reflection token symbol
+     * @param _admin: admin address with ownership
+     */
     function initialize(
         IERC20Metadata _stakedToken,
         IERC20Metadata _reflectionToken,
@@ -748,7 +752,7 @@ contract FSPPool is Ownable, ReentrancyGuard {
             user.rewardDebt += reward;
         }
 
-        if (_amount > 0) {
+        if(_amount > 0) {
             user.amount = user.amount + _amount;
             user.depositTime = block.timestamp;
             stakedToken.safeTransferFrom(
@@ -769,6 +773,9 @@ contract FSPPool is Ownable, ReentrancyGuard {
         return false;
     }
 
+    /*
+     * @notice Withdraw staked tokens and collect reward tokens
+     */
     function withdrawAll() external payable nonReentrant {
         require(msg.value >= getWithdrawFee(), "withdraw fee is not enough");
         payable(SMART_CHEF_FACTORY).transfer(msg.value);
@@ -851,6 +858,9 @@ contract FSPPool is Ownable, ReentrancyGuard {
         emit NewUserLimitAmount(limitAmountPerUser);
     }
 
+    /*
+     * @notice update fee
+    */
     function updateFees(uint256 _depositFee, uint256 _withdrawFee, uint256 _emergencyWithdrawFee) public {
         require(msg.sender == SMART_CHEF_FACTORY);
         depositFee = _depositFee;
@@ -859,18 +869,30 @@ contract FSPPool is Ownable, ReentrancyGuard {
     }
 
     
+    /*
+     * @notice Return Deposit Fee
+    */
     function getDepositFee() public view returns (uint256) {
         return depositFee.mul(rewardPercent).div(10**5);
     }
 
+    /*
+     * @notice Return Withdraw Fee
+    */
     function getWithdrawFee() public view returns (uint256) {
         return withdrawFee.mul(rewardPercent).div(10**5);
     }
 
+    /*
+     * @notice Return Emergency Withdraw Fee
+    */
     function getEmergencyWithdrawFee() public view returns (uint256) {
         return emergencyWithdrawFee.mul(rewardPercent).div(10**5);
     }
 
+    /*
+     * @notice Return Total Staked Tokens
+    */
     function getTotalStaked() public view returns (uint256) {
        uint256 _totalStaked = 0;
        for(uint256 id = 0; id < stakedUserList.length ; id++) {
@@ -981,6 +1003,21 @@ contract FSPFactory is Ownable {
         //
     }
 
+    /*
+     * @notice Deply the contract
+     * @param _stakedToken: staked token address
+     * @param _reflectionToken: _reflectionToken token address
+     * @param _rewardSupply: Reward Supply Amount
+     * @param _APYPercent: APY
+     * @param _lockTimeType: Lock Time Type 
+               0 - 1 year 
+               1- 180 days 
+               2- 90 days 
+               3 - 30 days
+     * @param _limitAmountPerUser: Pool limit per user in stakedToken
+     * @param _stakedTokenSymbol: staked token symbol
+     * @param _reflectionTokenSymbol: reflection token symbol
+     */
     function deployPool(
         IERC20Metadata _stakedToken,
         IERC20Metadata _reflectionToken,
@@ -1060,10 +1097,16 @@ contract FSPFactory is Ownable {
         emit NewFSPPool(smartChefAddress);
     }
 
+    /*
+     * @notice Update Pool Creation Fee
+    */
     function updatePoolCreateFee(uint256 _poolCreateFee) external onlyOwner {
         poolCreateFee = _poolCreateFee;
     }
 
+    /*
+     * @notice update fees of the pools
+    */
     function updateFees(uint256 _depositFee, uint256 _withdrawFee, uint256 _emergencyWithdrawFee) external onlyOwner{
         for(uint256 i = 0; i<allPools.length; i++){
             FSPPool(allPools[i]).updateFees(_depositFee, _withdrawFee, _emergencyWithdrawFee);
@@ -1109,6 +1152,9 @@ contract FSPFactory is Ownable {
         tokenContract.transfer(to, amount);
     }
 
+    /*
+     * @notice return Pool Create Fee
+    */
     function getCreationFee(uint256 _lockTimeType) public view returns(uint256){
         uint256 rewardRatio = _lockTimeType == 0
         ? rewardRatio1
@@ -1121,6 +1167,9 @@ contract FSPFactory is Ownable {
         return rewardRatio * poolCreateFee;
     }
 
+    /*
+    * @notice Return all deployed pool addresses
+    */
     function getAllPools() public view returns (address[] memory){
         return allPools;
     }

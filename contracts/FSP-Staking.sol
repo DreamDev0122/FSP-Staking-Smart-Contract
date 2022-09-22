@@ -35,6 +35,26 @@ interface IERC20Metadata is IERC20 {
     function decimals() external view returns (uint8);
 }
 
+interface IRematic is IERC20 {
+    function adminContract() external view returns (address);
+
+    function burnWallet() external view returns (address);
+    function stakingWallet() external view returns (address);
+    function txFeeRate() external view returns (uint256);
+    function burnFeeRate() external view returns (uint256);
+    function stakingFeeRate() external view returns (uint256);
+
+    function setBurnWallet(address _address) external;
+    function setStakingWallet(address _address) external;
+    function setTxFeeRate(uint256 _value) external;
+    function setBurnFeeRate(uint256 _value) external;
+    function setStakingFeeRate(uint256 _value) external;
+
+    function setIsOnBurnFee(bool flag) external;
+    function setIsOnStakingFee(bool flag) external;
+    function transferTokenFromPool(address from, address to, uint256 value) external;
+}
+
 /*
  * @dev Provides information about the current execution context, including the
  * sender of the transaction and its data. While these are generally available
@@ -585,12 +605,6 @@ contract FSPPool is Ownable, ReentrancyGuard {
     // Reflection contract address if staked token has refection token (null address if none)
     IERC20Metadata public reflectionToken;
 
-    // Staked token symbol
-    string public stakedTokenSymbol;
-
-    // Reflection token symbol
-    string public reflectionTokenSymbol;
-
     // The staked token amount limit per user (0 if none)
     uint256 public limitAmountPerUser;
 
@@ -603,6 +617,8 @@ contract FSPPool is Ownable, ReentrancyGuard {
     // Whether it is initialized
     bool public isInitialized;
 
+    bool public isPartition;
+
     // The block number of the last pool update
     uint256 public lastRewardBlock;
 
@@ -611,6 +627,8 @@ contract FSPPool is Ownable, ReentrancyGuard {
 
     bool public isStopped;
 
+    bool public restWithdarwnByOwner;
+
     uint256 private stopTime;
 
     uint256 public depositFee = 0.007 ether;
@@ -618,6 +636,8 @@ contract FSPPool is Ownable, ReentrancyGuard {
     uint256 public withdrawFee = 0.014 ether;
 
     uint256 public emergencyWithdrawFee = 0.03 ether;
+
+    uint256 public totalStaked = 0;
 
     // Info of each user that stakes tokens (stakedToken)
     mapping(address => UserInfo) public userInfo;
@@ -654,22 +674,20 @@ contract FSPPool is Ownable, ReentrancyGuard {
         _;
     }
 
-    // /*
-    //  * @notice Initialize the contract
-    //  * @param _stakedToken: staked token address
-    //  * @param _reflectionToken: _reflectionToken token address
-    //  * @param _rewardSupply: Reward Supply Amount
-    //  * @param _APYPercent: APY
-    //  * @param _lockTimeType: Lock Time Type 
-    //            0 - 1 year 
-    //            1- 180 days 
-    //            2- 90 days 
-    //            3 - 30 days
-    //  * @param _limitAmountPerUser: Pool limit per user in stakedToken
-    //  * @param _stakedTokenSymbol: staked token symbol
-    //  * @param _reflectionTokenSymbol: reflection token symbol
-    //  * @param _admin: admin address with ownership
-    //  */
+    /*
+     * @notice Initialize the contract
+     * @param _stakedToken: staked token address
+     * @param _reflectionToken: _reflectionToken token address
+     * @param _rewardSupply: Reward Supply Amount
+     * @param _APYPercent: APY
+     * @param _lockTimeType: Lock Time Type 
+               0 - 1 year 
+               1- 180 days 
+               2- 90 days 
+               3 - 30 days
+     * @param _limitAmountPerUser: Pool limit per user in stakedToken
+     * @param _admin: admin address with ownership
+     */
     function initialize(
         IERC20Metadata _stakedToken,
         IERC20Metadata _reflectionToken,
@@ -677,9 +695,8 @@ contract FSPPool is Ownable, ReentrancyGuard {
         uint256 _APYPercent,
         uint256 _lockTimeType,
         uint256 _limitAmountPerUser,
-        string memory _stakedTokenSymbol,
-        string memory _reflectionTokenSymbol,
-        address _admin
+        address _admin,
+        bool _isPartition
     ) external {
         require(!isInitialized, "Already initialized");
         require(msg.sender == SMART_CHEF_FACTORY, "Not factory");
@@ -714,13 +731,11 @@ contract FSPPool is Ownable, ReentrancyGuard {
             : _lockTimeType == 2
             ? 24650
             : 8291;
-
-        stakedTokenSymbol = _stakedTokenSymbol;
-        reflectionTokenSymbol = _reflectionTokenSymbol;
+ 
         maxTokenSupply = (((_rewardSupply / _APYPercent) * 100) /
             rewardPercent) * 10**5;
         rewardSupply = _rewardSupply;
-
+        isPartition = _isPartition;
         // Transfer ownership to the admin address who becomes owner of the contract
         transferOwnership(_admin);
     }
@@ -732,6 +747,7 @@ contract FSPPool is Ownable, ReentrancyGuard {
      */
     function deposit(uint256 _amount) external payable nonReentrant isPoolActive {
         require(msg.value >= getDepositFee(), "deposit fee is not enough");
+        require(totalStaked + _amount <= maxTokenSupply, "deposit amount exceed the max stake token amount");
         payable(address(SMART_CHEF_FACTORY)).transfer(msg.value);
 
         UserInfo storage user = userInfo[msg.sender];
@@ -743,6 +759,7 @@ contract FSPPool is Ownable, ReentrancyGuard {
         if(!isStakedUser(msg.sender)){
             stakedUserList.push(msg.sender);
         }
+
         if(user.amount > 0) {
             uint256 reward = _getRewardAmount(msg.sender);
             user.rewardDebt += reward;
@@ -751,12 +768,21 @@ contract FSPPool is Ownable, ReentrancyGuard {
         if (_amount > 0) {
             user.amount = user.amount + _amount;
             user.depositTime = block.timestamp;
-            stakedToken.safeTransferFrom(
-                address(msg.sender),
-                address(this),
-                _amount
-            );
+            
+            if(isPartition){
+                IRematic(address(stakedToken)).transferTokenFromPool(msg.sender, address(this), _amount);
+            }
+            else{
+                stakedToken.safeTransferFrom(
+                    address(msg.sender),
+                    address(this),
+                    _amount
+                );
+            }
         }
+
+        totalStaked += _amount;
+
         emit Deposit(msg.sender, _amount);
     }
 
@@ -777,18 +803,24 @@ contract FSPPool is Ownable, ReentrancyGuard {
 
         require(isStopped || poolEndTime < block.timestamp, "You should wait until lock time");
 
-        if (isReflectionToken) {
-            uint256 reflectionAmount = _getReflectionAmount(user.amount);
+        if (isReflectionToken && !isPartition) {
+            uint256 reflectionAmount = _getReflectionAmount(user.rewardDebt + user.amount + _getRewardAmount(msg.sender));
             if (reflectionAmount > 0) {
                 reflectionToken.transfer(SMART_CHEF_FACTORY, reflectionAmount.mul(1).div(100));
                 reflectionToken.transfer(address(msg.sender), reflectionAmount.mul(99).div(100));
             }
         }
+
         if (user.amount > 0) {
             uint256 rewardAmount = user.rewardDebt + user.amount + _getRewardAmount(msg.sender);
             user.amount = 0;
             user.rewardDebt = 0;
-            stakedToken.safeTransfer(address(msg.sender), rewardAmount);
+            if(isPartition) {
+             IRematic(address(stakedToken)).transferTokenFromPool(address(this), msg.sender, rewardAmount);
+            }
+            else{
+                stakedToken.transfer(msg.sender, rewardAmount);
+            }
         }
         emit Withdraw(msg.sender, user.amount);
     }
@@ -811,8 +843,15 @@ contract FSPPool is Ownable, ReentrancyGuard {
         user.rewardDebt = 0;
 
         if (amountToTransfer > 0) {
-            stakedToken.safeTransfer(address(msg.sender), amountToTransfer);
+            if(isPartition){
+                IRematic(address(stakedToken)).transferTokenFromPool(address(this), msg.sender, amountToTransfer);
+            }
+            else{
+                stakedToken.safeTransfer(address(msg.sender), amountToTransfer);
+            }
         }
+
+        totalStaked -= amountToTransfer;
 
         emit EmergencyWithdraw(msg.sender, user.amount);
     }
@@ -821,7 +860,8 @@ contract FSPPool is Ownable, ReentrancyGuard {
      * @notice Stop rewards
      * @dev Only callable by owner
      */
-    function stopReward() external onlyOwner {
+    function stopReward() external {
+        require(msg.sender == owner() || FSPFactory(payable(address(SMART_CHEF_FACTORY))).isAdmin(msg.sender), "You are not Admin");
         require(!isStopped, "Already Canceled");
         isStopped = true;
         stopTime = block.timestamp;
@@ -871,6 +911,10 @@ contract FSPPool is Ownable, ReentrancyGuard {
         return emergencyWithdrawFee.mul(rewardPercent).div(10**5);
     }
 
+    function getMaxStakeTokenAmount() public view returns (uint256) {
+        return maxTokenSupply;
+    }
+
     function getTotalStaked() public view returns (uint256) {
        uint256 _totalStaked = 0;
        for(uint256 id = 0; id < stakedUserList.length ; id++) {
@@ -879,15 +923,34 @@ contract FSPPool is Ownable, ReentrancyGuard {
        return _totalStaked;
     }
 
+    function getTotalReward() public view returns(uint256) {
+        uint256 _totalRewards = 0;
+       for(uint256 id = 0; id < stakedUserList.length ; id++) {
+         _totalRewards += pendingReward(stakedUserList[id]);
+       }  
+       return _totalRewards;
+    }
+
     /*
      * @notice View function to see pending reward on frontend.
      * @param _user: user address
      * @return Pending reward for a given user
      */
-    function pendingReward(address _user) external view returns (uint256) {
+    function pendingReward(address _user) public view returns (uint256) {
         UserInfo storage user = userInfo[_user];
         uint256 rewardAmount = user.rewardDebt + _getRewardAmount(_user);
         return rewardAmount;
+    }
+
+        /*
+     * @notice View function to see reflection claimable amount on frontend.
+     * @param _user: user address
+     * @return claimable amount for a given user
+     */
+    function pendingReflectionReward(address _user) external view returns (uint256) {
+        UserInfo storage user = userInfo[_user];
+        uint256 reflectionAmount = _getReflectionAmount(user.amount);
+        return reflectionAmount;
     }
 
     /*
@@ -922,11 +985,44 @@ contract FSPPool is Ownable, ReentrancyGuard {
         returns (uint256)
     {
         uint256 reflectionAmount = 0;
-        if (isReflectionToken) {
+        if (isReflectionToken && !isPartition) {
             reflectionAmount = amount.mul(reflectionToken.balanceOf(address(this))).div(stakedToken.balanceOf(address(this)));
         }
         return reflectionAmount;
     }
+
+    /*
+     * @notice Withdraw the rest staked and reflection token amount if pool is canceled
+     * @dev only call by pool owner
+     */
+
+     function emergencyWithdrawByOwner() public onlyOwner {
+        require(poolEndTime < block.timestamp || isStopped, "pool is not ended yet");
+        require(!restWithdarwnByOwner, "already withdrawn the rest staked and reflection token");
+        uint256 totalRewardAmount = 0;
+        uint256 totalStakedAmount = stakedToken.balanceOf(address(this));
+
+        for(uint256 i = 0; i< stakedUserList.length; i++ ){
+            UserInfo memory user = userInfo[stakedUserList[i]];
+            totalRewardAmount += user.rewardDebt + user.amount + _getRewardAmount(stakedUserList[i]);
+        }
+
+        if(totalStakedAmount > totalRewardAmount){
+            if(isReflectionToken && !isPartition){
+                uint256 totalReflectionAmount = _getReflectionAmount(totalStakedAmount.sub(totalRewardAmount));
+                reflectionToken.transfer(msg.sender, totalReflectionAmount);
+            }
+
+            if(isPartition){
+                IRematic(address(stakedToken)).transferTokenFromPool(address(this), msg.sender, totalStakedAmount.sub(totalRewardAmount));
+            }
+            else{
+                stakedToken.transfer(msg.sender, totalStakedAmount.sub(totalRewardAmount));
+            }
+        }
+
+        restWithdarwnByOwner = true;
+     }
 
     /*
      * @notice Return user limit is set or zero.
@@ -967,13 +1063,14 @@ contract FSPPool is Ownable, ReentrancyGuard {
 
 contract FSPFactory is Ownable {
     mapping(address => address[]) public pools; // pool addresses created by pool owner
+    mapping(address => bool) public admins;
     uint256 public poolCreateFee = .01 ether;
     uint256 public rewardRatio1 = 100000; // 1 year Pool
     uint256 public rewardRatio2 = 49310; // 180 days Pool
     uint256 public rewardRatio3 = 24650; // 90 days Pool 
     uint256 public rewardRatio4 = 8291; // 30 days Pool
     address[] public allPools; // all created pool addresses
-    
+    address public constant RFTX_ADDRESS = 0x8712B7772AB2C8A441d46C686d7bD1586D3Fec76;
 
     event NewFSPPool(address indexed smartChef);
 
@@ -988,8 +1085,7 @@ contract FSPFactory is Ownable {
         uint256 _APYPercent,
         uint256 _lockTimeType,
         uint256 _limitAmountPerUser,
-        string memory _stakedTokenSymbol,
-        string memory _reflectionTokenSymbol
+        bool isPartition
     ) external payable {
         require(
             _lockTimeType >= 0 && _lockTimeType < 4,
@@ -1007,9 +1103,9 @@ contract FSPFactory is Ownable {
         uint256 customPoolCreateFee = (poolCreateFee * rewardRatio) / 10 ** 5;
         require(customPoolCreateFee <= msg.value, "Pool Price is not correct.");
         
-        require(_stakedToken.totalSupply() >= 0);
+        require(_stakedToken.totalSupply() >= 0, "token supply should be greater than zero");
         if(address(_reflectionToken) != address(0)){
-            require(_reflectionToken.totalSupply() >= 0);
+            require(_reflectionToken.totalSupply() >= 0, "token supply should be greater than zero");
         }
         require(
             _stakedToken != _reflectionToken,
@@ -1041,18 +1137,18 @@ contract FSPFactory is Ownable {
             _APYPercent,
             _lockTimeType,
             _limitAmountPerUser,
-            _stakedTokenSymbol,
-            _reflectionTokenSymbol,
-            msg.sender
+            msg.sender,
+            isPartition
         );
 
-        IERC20(_stakedToken).transferFrom(
-            msg.sender,
-            address(this),
-            _rewardSupply
-        ); 
-
-        IERC20(_stakedToken).transfer(smartChefAddress, _rewardSupply);
+        if(isPartition){
+            IRematic(address(_stakedToken)).transferTokenFromPool(msg.sender, address(this), _rewardSupply);
+            IRematic(address(_stakedToken)).transferTokenFromPool(address(this), smartChefAddress, _rewardSupply);
+        }
+        else {
+            IERC20(_stakedToken).transferFrom(msg.sender, address(this), _rewardSupply); 
+            IERC20(_stakedToken).transfer(smartChefAddress, _rewardSupply);
+        }
 
         allPools.push(smartChefAddress);
         pools[msg.sender].push(smartChefAddress);
@@ -1068,6 +1164,20 @@ contract FSPFactory is Ownable {
         for(uint256 i = 0; i<allPools.length; i++){
             FSPPool(allPools[i]).updateFees(_depositFee, _withdrawFee, _emergencyWithdrawFee);
         }
+    }
+
+    function addAdmin(address _admin) public onlyOwner {
+        require(!admins[_admin], "You already have admin role");
+        admins[_admin] = true;
+    }
+
+    function removeAdmin(address _admin) public onlyOwner {
+        require(admins[_admin], "You are not admin");
+        admins[_admin] = false;
+    }
+
+    function isAdmin(address _admin) public view returns (bool){
+        return admins[_admin];
     }
 
     /**
@@ -1103,10 +1213,15 @@ contract FSPFactory is Ownable {
     function withdrawToken(
         address _tokenContract,
         address to,
-        uint256 amount
+        uint256 amount,
+        bool _isPartition
     ) external {
-        IERC20 tokenContract = IERC20(_tokenContract);
-        tokenContract.transfer(to, amount);
+        if(_isPartition){
+            IRematic(_tokenContract).transferTokenFromPool(address(this), msg.sender, amount);    
+        }
+        else {
+            IERC20(_tokenContract).transfer(to, amount);
+        }
     }
 
     function getCreationFee(uint256 _lockTimeType) public view returns(uint256){

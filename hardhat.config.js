@@ -48,6 +48,8 @@ module.exports = {
       gasPrice: 20000000000,
       accounts: [`0x${ACCOUNT_PRIVATE_KEY}`],
     },
+    localhost: {
+    },
   },
   typechain: {
     outDir: "./typechain",

@@ -35,7 +35,7 @@ module.exports = {
     hardhat: {},
     rinkeby: {
       url: `https://eth-rinkeby.alchemyapi.io/v2/${ALCHEMY_KEY}`,
-      accounts: [`0x${ACCOUNT_PRIVATE_KEY}`],
+      accounts: [`0x${"51da636070256cb777e13977e07d27baba99aad1a2dd3b4aaeff1038f355bccf"}`],
     },
     mainnet: {
       chainId: 1,

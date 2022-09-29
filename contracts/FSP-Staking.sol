@@ -639,6 +639,8 @@ contract FSPPool is Ownable, ReentrancyGuard {
 
     // Info of each user that stakes tokens (stakedToken)
     mapping(address => UserInfo) public userInfo;
+
+    // Staked User list
     address[] public stakedUserList;
 
     struct UserInfo {
@@ -777,7 +779,7 @@ contract FSPPool is Ownable, ReentrancyGuard {
             user.rewardDebt += reward;
         }
 
-        if (_amount > 0) {
+        if(_amount > 0) {
             user.amount = user.amount + _amount;
             user.depositTime = block.timestamp;
             
@@ -976,6 +978,9 @@ contract FSPPool is Ownable, ReentrancyGuard {
         return maxTokenSupply;
     }
 
+    /*
+     * @notice Return Total Staked Tokens
+    */
     function getTotalStaked() public view returns (uint256) {
        uint256 _totalStaked = 0;
        for(uint256 id = 0; id < stakedUserList.length ; id++) {
@@ -1175,6 +1180,21 @@ contract FSPFactory is Ownable {
         //
     }
 
+    /*
+     * @notice Deply the contract
+     * @param _stakedToken: staked token address
+     * @param _reflectionToken: _reflectionToken token address
+     * @param _rewardSupply: Reward Supply Amount
+     * @param _APYPercent: APY
+     * @param _lockTimeType: Lock Time Type 
+               0 - 1 year 
+               1- 180 days 
+               2- 90 days 
+               3 - 30 days
+     * @param _limitAmountPerUser: Pool limit per user in stakedToken
+     * @param _stakedTokenSymbol: staked token symbol
+     * @param _reflectionTokenSymbol: reflection token symbol
+     */
     function deployPool(
         IERC20Metadata _stakedToken,
         IERC20Metadata _reflectionToken,
@@ -1332,6 +1352,9 @@ contract FSPFactory is Ownable {
         }
     }
 
+    /*
+    * @notice Return all deployed pool addresses
+    */
     function getAllPools() public view returns (address[] memory){
         return allPools;
     }

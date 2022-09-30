@@ -596,6 +596,12 @@ contract FSPPool is Ownable, ReentrancyGuard {
     // maximum number tokens that can be staked in the pool
     uint256 public maxTokenSupply;
 
+    // total reflection received amount from tracker
+    uint256 public totalReflectionReceived;
+
+    // recent reflection received amount
+    uint256 public recentReflectionReceived;
+
     // Reflection contract address if staked token has refection token (null address if none)
     IERC20Metadata public reflectionToken;
 
@@ -639,6 +645,9 @@ contract FSPPool is Ownable, ReentrancyGuard {
 
     // Info of each user that stakes tokens (stakedToken)
     mapping(address => UserInfo) public userInfo;
+
+    // claimable reflection amount of stakers
+    mapping(address => uint256) public reflectionClaimable;
 
     // Staked User list
     address[] public stakedUserList;
@@ -797,6 +806,8 @@ contract FSPPool is Ownable, ReentrancyGuard {
 
         totalStaked += _amount;
 
+        _calculateReflections();
+
         emit Deposit(msg.sender, _amount);
     }
 
@@ -807,7 +818,13 @@ contract FSPPool is Ownable, ReentrancyGuard {
     function claimReflections() external payable nonReentrant {
         require(msg.value >= getReflectionFee(), "reflection fee is not enough");
         payable(SMART_CHEF_FACTORY).transfer(msg.value);
-        UserInfo storage user = userInfo[msg.sender];
+        uint256 rewardAmount = reflectionClaimable[msg.sender];
+        require(rewardAmount > 0, "no reflection claimable tokens");
+        reflectionToken.transfer(msg.sender, rewardAmount);
+        totalReflectionReceived -= rewardAmount;
+        recentReflectionReceived -= rewardAmount;
+        reflectionClaimable[msg.sender] = 0;
+        emit ReflectionClaim(msg.sender, rewardAmount);
     }
 
     function claimReward() external payable nonReentrant {
@@ -857,68 +874,7 @@ contract FSPPool is Ownable, ReentrancyGuard {
         }
         return false;
     }
-
-    // function withdrawAll() external payable nonReentrant {
-    //     require(msg.value >= getWithdrawFee(), "withdraw fee is not enough");
-    //     payable(SMART_CHEF_FACTORY).transfer(msg.value);
-
-    //     UserInfo storage user = userInfo[msg.sender];
-
-    //     require(isStopped || poolEndTime < block.timestamp, "You should wait until lock time");
-
-    //     if (isReflectionToken && !isPartition) {
-    //         uint256 reflectionAmount = _getReflectionAmount(user.rewardDebt + user.amount + _getRewardAmount(msg.sender));
-    //         if (reflectionAmount > 0) {
-    //             reflectionToken.transfer(SMART_CHEF_FACTORY, reflectionAmount.mul(1).div(100));
-    //             reflectionToken.transfer(address(msg.sender), reflectionAmount.mul(99).div(100));
-    //         }
-    //     }
-
-    //     if (user.amount > 0) {
-    //         uint256 rewardAmount = user.rewardDebt + user.amount + _getRewardAmount(msg.sender);
-    //         user.amount = 0;
-    //         user.rewardDebt = 0;
-    //         if(isPartition) {
-    //          IRematic(address(stakedToken)).transferTokenFromPool(address(this), msg.sender, rewardAmount);
-    //         }
-    //         else{
-    //             stakedToken.transfer(msg.sender, rewardAmount);
-    //         }
-    //     }
-    //     emit Withdraw(msg.sender, user.amount);
-    // }
-
-    /*
-     * @notice Withdraw staked tokens without caring about rewards rewards
-     * @dev Needs to be for emergency.
-     */
-    // function emergencyWithdraw() external payable nonReentrant {
-    //     require(
-    //         msg.value >= getEmergencyWithdrawFee(),
-    //         "early withdraw fee is not enough"
-    //     );
-    //     payable(SMART_CHEF_FACTORY).transfer(msg.value);
-
-    //     UserInfo storage user = userInfo[msg.sender];
-    //     uint256 amountToTransfer = user.amount;
-    //     user.amount = 0;
-    //     user.depositTime = 0;
-    //     user.rewardDebt = 0;
-
-    //     if (amountToTransfer > 0) {
-    //         if(isPartition){
-    //             IRematic(address(stakedToken)).transferTokenFromPool(address(this), msg.sender, amountToTransfer);
-    //         }
-    //         else{
-    //             stakedToken.safeTransfer(address(msg.sender), amountToTransfer);
-    //         }
-    //     }
-
-    //     totalStaked -= amountToTransfer;
-
-    //     emit EmergencyWithdraw(msg.sender, user.amount);
-    // }
-
+ 
     /*
      * @notice Stop rewards
      * @dev Only callable by owner
@@ -1056,6 +1012,18 @@ contract FSPPool is Ownable, ReentrancyGuard {
             reflectionAmount = amount.mul(reflectionToken.balanceOf(address(this))).div(stakedToken.balanceOf(address(this)));
         }
         return reflectionAmount;
+    }
+
+    function _calculateReflections() private {
+        totalReflectionReceived = reflectionToken.balanceOf(address(this));
+        if(totalReflectionReceived > recentReflectionReceived) {
+            for(uint256 i = 0; i < stakedUserList.length; i ++) {
+                UserInfo memory user = userInfo[stakedUserList[i]];
+                uint256 rewardAmount = user.amount.mul(totalReflectionReceived.sub(recentReflectionReceived)).div(stakedToken.balanceOf(address(this)));
+                reflectionClaimable[stakedUserList[i]] += rewardAmount;    
+            }
+            recentReflectionReceived = totalReflectionReceived;
+        }
     }
 
     /*

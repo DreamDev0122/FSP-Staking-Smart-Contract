@@ -971,9 +971,7 @@ contract FSPPool is Ownable, ReentrancyGuard {
      * @return claimable amount for a given user
      */
     function pendingReflectionReward(address _user) external view returns (uint256) {
-        UserInfo storage user = userInfo[_user];
-        uint256 reflectionAmount = _getReflectionAmount(user.amount);
-        return reflectionAmount;
+        return reflectionClaimable[_user];
     }
 
     /*

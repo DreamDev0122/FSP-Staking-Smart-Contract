@@ -776,7 +776,7 @@ contract FSPPool is Ownable, ReentrancyGuard {
         UserInfo storage user = userInfo[msg.sender];
         require(
             !userLimit || ((_amount + user.amount) <= limitAmountPerUser),
-            "Deposit: Amount above limit"
+            "Deposit limit exceeded"
         );
 
         if(!isStakedUser(msg.sender)){
@@ -817,10 +817,12 @@ contract FSPPool is Ownable, ReentrancyGuard {
 
     function claimReflections() external payable nonReentrant {
         require(msg.value >= getReflectionFee(), "reflection fee is not enough");
+        require(isReflectionToken, "staked token don't have reflection token");
         payable(SMART_CHEF_FACTORY).transfer(msg.value);
         uint256 rewardAmount = reflectionClaimable[msg.sender];
         require(rewardAmount > 0, "no reflection claimable tokens");
-        reflectionToken.transfer(msg.sender, rewardAmount);
+        reflectionToken.transfer(msg.sender, rewardAmount.mul(99).div(100));
+        reflectionToken.transfer(address(SMART_CHEF_FACTORY), rewardAmount.mul(1).div(100));
         totalReflectionReceived -= rewardAmount;
         recentReflectionReceived -= rewardAmount;
         reflectionClaimable[msg.sender] = 0;
@@ -832,6 +834,7 @@ contract FSPPool is Ownable, ReentrancyGuard {
         payable(SMART_CHEF_FACTORY).transfer(msg.value);
         UserInfo storage user = userInfo[msg.sender];
         uint256 rewardAmount = pendingReward(msg.sender);
+        require(rewardAmount > 0, "There are no claimable tokens in this pool");
         if(isPartition) {
             IRematic(address(stakedToken)).transferTokenFromPool(address(this), msg.sender, rewardAmount);
         }
@@ -853,6 +856,7 @@ contract FSPPool is Ownable, ReentrancyGuard {
         require(msg.value >= withdrawFee, "withdrawFee is not enough");
         payable(SMART_CHEF_FACTORY).transfer(msg.value);
         UserInfo storage user = userInfo[msg.sender];
+        require(user.amount > 0, "No tokens have been deposited into this pool");
         uint256 rewardAmount = pendingReward(msg.sender);
         user.rewardDebt = rewardAmount;
         if(isPartition) {
@@ -970,8 +974,8 @@ contract FSPPool is Ownable, ReentrancyGuard {
      * @param _user: user address
      * @return claimable amount for a given user
      */
-    function pendingReflectionReward(address _user) external view returns (uint256) {
-        return reflectionClaimable[_user];
+    function pendingReflectionReward(address _user) public view returns (uint256) {
+        return reflectionClaimable[_user].mul(99).div(100);
     }
 
     /*
@@ -1017,8 +1021,10 @@ contract FSPPool is Ownable, ReentrancyGuard {
         if(totalReflectionReceived > recentReflectionReceived) {
             for(uint256 i = 0; i < stakedUserList.length; i ++) {
                 UserInfo memory user = userInfo[stakedUserList[i]];
-                uint256 rewardAmount = user.amount.mul(totalReflectionReceived.sub(recentReflectionReceived)).div(stakedToken.balanceOf(address(this)));
-                reflectionClaimable[stakedUserList[i]] += rewardAmount;    
+                if(user.amount > 0){
+                    uint256 rewardAmount = user.amount.mul(totalReflectionReceived.sub(recentReflectionReceived)).div(stakedToken.balanceOf(address(this)));
+                    reflectionClaimable[stakedUserList[i]] += rewardAmount;
+                }            
             }
             recentReflectionReceived = totalReflectionReceived;
         }
@@ -1034,16 +1040,18 @@ contract FSPPool is Ownable, ReentrancyGuard {
         require(!restWithdarwnByOwner, "already withdrawn the rest staked and reflection token");
         uint256 totalRewardAmount = 0;
         uint256 totalStakedAmount = stakedToken.balanceOf(address(this));
+        uint256 totalReflectionRewardAmount = 0;
 
         for(uint256 i = 0; i< stakedUserList.length; i++ ){
             UserInfo memory user = userInfo[stakedUserList[i]];
-            totalRewardAmount += user.rewardDebt + user.amount + _getRewardAmount(stakedUserList[i]);
+            totalRewardAmount += user.amount + pendingReward(stakedUserList[i]);
+            totalReflectionRewardAmount += pendingReflectionReward(stakedUserList[i]);
         }
 
         if(totalStakedAmount > totalRewardAmount){
             if(isReflectionToken && !isPartition){
-                uint256 totalReflectionAmount = _getReflectionAmount(totalStakedAmount.sub(totalRewardAmount));
-                reflectionToken.transfer(msg.sender, totalReflectionAmount);
+                reflectionToken.transfer(msg.sender, totalReflectionRewardAmount.mul(99).div(100));
+                reflectionToken.transfer(address(SMART_CHEF_FACTORY), totalReflectionRewardAmount.mul(1).div(100));
             }
 
             if(isPartition){

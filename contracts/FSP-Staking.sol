@@ -805,9 +805,10 @@ contract FSPPool is Ownable, ReentrancyGuard {
         }
 
         totalStaked += _amount;
-
-        _calculateReflections();
-
+        
+        if(isReflectionToken){
+            _calculateReflections();
+        }
         emit Deposit(msg.sender, _amount);
     }
 
@@ -826,6 +827,9 @@ contract FSPPool is Ownable, ReentrancyGuard {
         totalReflectionReceived -= rewardAmount;
         recentReflectionReceived -= rewardAmount;
         reflectionClaimable[msg.sender] = 0;
+        if(isReflectionToken){
+            _calculateReflections();
+        }
         emit ReflectionClaim(msg.sender, rewardAmount);
     }
 
@@ -847,6 +851,9 @@ contract FSPPool is Ownable, ReentrancyGuard {
         }
         else {
             user.claimAmount += rewardAmount;
+        }
+        if(isReflectionToken){
+            _calculateReflections();
         }
         emit RewardClaim(msg.sender, rewardAmount);
     }

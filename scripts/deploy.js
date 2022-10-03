@@ -23,21 +23,21 @@ async function main() {
 
   console.log(`address: ${FSPStakingContract.address}`);
 
-  const BalloonToken = await hre.ethers.getContractFactory("BalloonToken");
-  const BalloonTokenContract = await BalloonToken.deploy();
+  // const BalloonToken = await hre.ethers.getContractFactory("BalloonToken");
+  // const BalloonTokenContract = await BalloonToken.deploy();
 
-  await BalloonTokenContract.deployed();
+  // await BalloonTokenContract.deployed();
 
-  console.log(`address: ${BalloonTokenContract.address}`);
+  // console.log(`address: ${BalloonTokenContract.address}`);
 
-  const ReflectionToken = await hre.ethers.getContractFactory(
-    "ReflectionToken"
-  );
-  const ReflectionTokenContract = await ReflectionToken.deploy(100000000000);
+  // const ReflectionToken = await hre.ethers.getContractFactory(
+  //   "ReflectionToken"
+  // );
+  // const ReflectionTokenContract = await ReflectionToken.deploy(100000000000);
 
-  await ReflectionTokenContract.deployed();
+  // await ReflectionTokenContract.deployed();
 
-  console.log(`address: ${ReflectionTokenContract.address}`);
+  // console.log(`address: ${ReflectionTokenContract.address}`);
 
   // const price = await FSPStakingContract.poolCreateFee();
 

@@ -1,5 +1,6 @@
 require("@nomiclabs/hardhat-waffle");
 require("@nomiclabs/hardhat-etherscan");
+require("@openzeppelin/hardhat-upgrades")
 require("hardhat-typechain");
 require("dotenv").config();
 
@@ -48,6 +49,11 @@ module.exports = {
       gasPrice: 20000000000,
       accounts: [`0x${ACCOUNT_PRIVATE_KEY}`],
     },
+    bscscan: {
+      chainId: 56,
+      url: `https://bsc-dataseed1.binance.org`,
+      accounts: [`0x${ACCOUNT_PRIVATE_KEY}`],
+    },
     localhost: {
     },
   },
@@ -56,8 +62,6 @@ module.exports = {
     target: "ethers-v5",
   },
   etherscan: {
-    apiKey: {
-      bscTestnet: "CDGSYGVF6Q67WZQHIEH57TCJH2GSIJBM3J",
-    },
+    apiKey: "CDGSYGVF6Q67WZQHIEH57TCJH2GSIJBM3J"
   },
 };

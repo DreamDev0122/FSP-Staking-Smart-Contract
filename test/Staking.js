@@ -1,6 +1,6 @@
 const { expect, assert, waffle } = require("chai");
 const { BigNumber } = require("ethers");
-const { ethers } = require("hardhat");
+const { ethers, upgrades } = require("hardhat");
 
 describe("FSPStaking", function () {
   let FSPStaking,
@@ -25,7 +25,37 @@ describe("FSPStaking", function () {
     ] = await ethers.getSigners();
 
     FSPStaking = await ethers.getContractFactory("FSPFactory");
-    FSPStakingContract = await FSPStaking.deploy();
+    // FSPStakingContract = await FSPStaking.deploy();
+    FSPStakingContract = await upgrades.deployProxy(
+      FSPStaking,
+      [
+        [
+          hre.ethers.utils.parseEther("0.04"),
+          hre.ethers.utils.parseEther("0.03"),
+          hre.ethers.utils.parseEther("0.02"),
+          hre.ethers.utils.parseEther("0.01"),
+        ],
+        [
+          hre.ethers.utils.parseEther("0.01"),
+          hre.ethers.utils.parseEther("0.0075"),
+        ],
+        hre.ethers.utils.parseEther("0.001"),
+        [
+          hre.ethers.utils.parseEther("0.01"),
+          hre.ethers.utils.parseEther("0.02"),
+        ],
+        [
+          hre.ethers.utils.parseEther("0.04"),
+          hre.ethers.utils.parseEther("0.04"),
+        ],
+        [
+          hre.ethers.utils.parseEther("0.008"),
+          hre.ethers.utils.parseEther("0.012"),
+        ],
+        [100000, 49310, 24650, 8291],
+      ],
+      { initializer: "initialize" }
+    );;
     await FSPStakingContract.deployed();
 
     BalloonToken = await ethers.getContractFactory("BalloonToken");
@@ -215,7 +245,7 @@ describe("FSPStaking", function () {
       await BalloonTokenContract.approve(StakingPoolContract.address, 100000000);
       await StakingPoolContract.rewardTokenTransfer();
       const depositFee = await StakingPoolContract.getDepositFee(true);
-      await expect(StakingPoolContract.deposit(1000, { value: depositFee - 1 })).to.be.revertedWith("deposit fee is not enough");
+      await expect(StakingPoolContract.deposit(1000, { value: depositFee.sub("1") })).to.be.revertedWith("deposit fee is not enough");  
     })
 
     it("deposit: should work deposit function correctly", async () => {
